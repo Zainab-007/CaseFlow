@@ -1,0 +1,49 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --clinical-navy: #0b1f33;
+    --clinical-teal: #0d9488;
+    --clinical-surface: #ffffff;
+    --clinical-bg: #f8fafc;
+  }
+
+  body {
+    @apply bg-slate-50 text-slate-900 antialiased font-sans m-0 min-h-screen;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  }
+
+  #root {
+    @apply min-h-screen flex flex-col;
+  }
+}
+
+/* Kiosk-specific high-accessibility touch utilities */
+.kiosk-touch-card {
+  @apply transition-all duration-150 ease-out active:scale-[0.98] select-none;
+}
+
+.kiosk-focus-ring {
+  @apply focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-teal-500 focus-visible:ring-offset-2;
+}
+
+/* Custom scrollbar for clinical dashboards */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
