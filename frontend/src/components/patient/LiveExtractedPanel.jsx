@@ -1,9 +1,9 @@
 import React from 'react';
-import { Activity, MapPin, Clock, Flame, Zap, AlertTriangle, ShieldCheck, HeartPulse, Pill } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 
 /**
- * Live Extracted Clinical Information Panel
- * Visibly mirrors structured medical facts extracted in real-time as the patient speaks or taps.
+ * Compact Live Clinical Notes sidebar for patient intake kiosk.
+ * Displays real-time clinical extractions in a clean, non-intrusive vertical list.
  */
 export default function LiveExtractedPanel({
   chiefComplaint,
@@ -12,154 +12,155 @@ export default function LiveExtractedPanel({
   lastUpdatedField = null,
   className = ''
 }) {
-  const items = [
+  const isProvided = (val) => {
+    if (!val) return false;
+    const str = String(val).trim().toLowerCase();
+    return (
+      str !== '' &&
+      str !== 'not yet provided' &&
+      str !== 'not provided' &&
+      str !== 'not yet specified' &&
+      str !== 'listening for complaint...'
+    );
+  };
+
+  const fields = [
     {
       key: 'chiefComplaint',
-      label: 'Chief Complaint (मुख्य समस्या)',
-      value: chiefComplaint || 'Listening for complaint...',
-      icon: Activity,
-      color: 'text-teal-700 bg-teal-50 border-teal-200'
+      label: 'Chief Complaint',
+      value: chiefComplaint,
     },
     {
       key: 'site',
-      label: 'Site / Location (जगह)',
+      label: 'Site / Location',
       value: extractedHistory.site,
-      icon: MapPin,
-      color: 'text-blue-700 bg-blue-50 border-blue-200'
     },
     {
       key: 'onset',
-      label: 'Onset & Duration (अवधि)',
+      label: 'Onset & Duration',
       value: extractedHistory.onset,
-      icon: Clock,
-      color: 'text-amber-700 bg-amber-50 border-amber-200'
     },
     {
       key: 'character',
-      label: 'Pain Character (प्रकृति)',
+      label: 'Pain Character',
       value: extractedHistory.character,
-      icon: Flame,
-      color: 'text-orange-700 bg-orange-50 border-orange-200'
-    },
-    {
-      key: 'aggravatingFactors',
-      label: 'Relation to Meals (भोजन से संबंध)',
-      value: extractedHistory.aggravatingFactors,
-      icon: Zap,
-      color: 'text-purple-700 bg-purple-50 border-purple-200',
-      showOnlyIfPresent: true
-    },
-    {
-      key: 'radiation',
-      label: 'Radiation (दर्द का फैलाव)',
-      value: extractedHistory.radiation,
-      icon: HeartPulse,
-      color: 'text-cyan-700 bg-cyan-50 border-cyan-200'
     },
     {
       key: 'severity',
-      label: 'Pain Severity (तीव्रता)',
+      label: 'Pain Severity',
       value: extractedHistory.severity,
-      icon: Activity,
-      color: 'text-rose-700 bg-rose-50 border-rose-200'
+    },
+    {
+      key: 'aggravatingFactors',
+      label: 'Relation to Meals',
+      value: extractedHistory.aggravatingFactors,
+      optional: true,
+    },
+    {
+      key: 'radiation',
+      label: 'Radiation / Spread',
+      value: extractedHistory.radiation,
+      optional: true,
     },
     {
       key: 'associatedSymptoms',
-      label: 'Associated Symptoms (अन्य लक्षण)',
+      label: 'Associated Symptoms',
       value: extractedHistory.associatedSymptoms,
-      icon: AlertTriangle,
-      color: 'text-indigo-700 bg-indigo-50 border-indigo-200'
+      optional: true,
     },
     {
       key: 'medications',
-      label: 'Medications / Allergies (दवाएं)',
+      label: 'Medications / Prior Care',
       value: extractedHistory.medications,
-      icon: Pill,
-      color: 'text-emerald-700 bg-emerald-50 border-emerald-200'
-    }
+      optional: true,
+    },
   ];
 
   return (
-    <div className={`bg-white rounded-3xl border-2 border-slate-200 p-5 shadow-sm space-y-4 ${className}`}>
+    <div className={`bg-white rounded-3xl border-2 border-slate-200 p-5 shadow-xs space-y-4 ${className}`}>
       {/* Header */}
       <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-        <div className="flex items-center gap-2">
-          <span className="relative flex h-3 w-3">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
-          </span>
-          <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider">
-            Live Clinical Notes (लाइव सारांश)
+        <div>
+          <h3 className="text-xs font-black uppercase tracking-wider text-slate-800">
+            Live Clinical Notes
           </h3>
+          <p className="text-[11px] text-slate-400 font-medium mt-0.5">
+            लाइव सारांश • Auto-extracted
+          </p>
         </div>
-        <span className="text-[11px] font-bold text-teal-800 bg-teal-50 px-2 py-0.5 rounded border border-teal-200">
-          SOCRATES Engine
-        </span>
+        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" title="Live sync" />
       </div>
 
-      {/* Red Flag Warning Banner if detected */}
-      {redFlags && redFlags.length > 0 ? (
-        <div className="p-3 bg-rose-50 border-2 border-rose-300 rounded-2xl animate-bounce-short">
-          <div className="flex items-start gap-2.5">
-            <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+      {/* Red-Flag Alert if detected */}
+      {redFlags && redFlags.length > 0 && (
+        <div className="p-3 bg-rose-50 border border-rose-200 rounded-2xl">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
             <div>
-              <h5 className="text-xs font-black text-rose-900 uppercase tracking-wide">
-                Safety Alert: Physician Review Required
-              </h5>
+              <span className="text-[10px] font-black uppercase text-rose-900 tracking-wider block">
+                Flagged for Physician
+              </span>
               <p className="text-xs font-semibold text-rose-700 mt-0.5">
                 {redFlags.join('; ')}
-              </p>
-              <p className="text-[10px] text-rose-600 mt-1 font-medium">
-                CaseFlow operates with conservative non-diagnostic safety guardrails.
               </p>
             </div>
           </div>
         </div>
-      ) : (
-        <div className="p-2.5 bg-emerald-50/60 border border-emerald-200/80 rounded-xl flex items-center gap-2">
-          <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-          <span className="text-xs font-medium text-emerald-800">
-            No emergency triage red-flags currently identified.
-          </span>
-        </div>
       )}
 
-      {/* Extracted Entity Cards */}
-      <div className="space-y-2 max-h-[380px] overflow-y-auto pr-1">
-        {items.map((item) => {
-          const isProvided = item.value && item.value !== 'Not yet specified' && item.value !== 'Not yet provided';
-          if (item.showOnlyIfPresent && !isProvided) return null;
+      {/* Compact List */}
+      <div className="space-y-1 divide-y divide-slate-100 text-xs">
+        {fields.map((field) => {
+          const provided = isProvided(field.value);
+          if (field.optional && !provided) return null;
 
-          const isRecentlyUpdated = lastUpdatedField === item.key;
-          const Icon = item.icon;
+          const isRecentlyUpdated = lastUpdatedField === field.key;
 
           return (
             <div
-              key={item.key}
-              className={`p-3 rounded-2xl border transition-all duration-300 ${
-                isRecentlyUpdated
-                  ? 'ring-2 ring-teal-500 scale-[1.01] bg-teal-50/80 border-teal-300'
-                  : isProvided
-                  ? 'bg-slate-50/90 border-slate-200'
-                  : 'bg-slate-50/40 border-dashed border-slate-200 opacity-60'
+              key={field.key}
+              className={`pt-2.5 pb-2 transition-all duration-300 ${
+                isRecentlyUpdated ? 'bg-teal-50/70 -mx-2 px-2 rounded-xl' : ''
               }`}
             >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <Icon className="w-3.5 h-3.5 text-slate-500" />
-                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                    {item.label}
-                  </span>
+              <div className="flex items-start gap-2.5">
+                <div className="mt-0.5 shrink-0">
+                  {provided ? (
+                    <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-emerald-100 text-emerald-700 text-[11px] font-black">
+                      ✓
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center justify-center w-4 h-4 text-slate-300 text-sm leading-none">
+                      ○
+                    </span>
+                  )}
                 </div>
-                {isProvided && (
-                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100/80 px-1.5 py-0.5 rounded">
-                    Extracted
-                  </span>
-                )}
+
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-1">
+                    <span className={`text-xs font-semibold ${provided ? 'text-slate-700' : 'text-slate-500'}`}>
+                      {field.label}
+                    </span>
+                    <span
+                      className={`text-[10px] font-bold ${
+                        provided ? 'text-emerald-700' : 'text-slate-400 font-normal'
+                      }`}
+                    >
+                      {provided ? '✓ Extracted' : '○ Not provided'}
+                    </span>
+                  </div>
+
+                  <p
+                    className={`mt-0.5 text-xs leading-relaxed ${
+                      provided
+                        ? 'font-bold text-slate-900'
+                        : 'text-slate-400 italic font-normal'
+                    }`}
+                  >
+                    {provided ? field.value : 'Not provided'}
+                  </p>
+                </div>
               </div>
-              <p className={`text-sm font-bold mt-1 ${isProvided ? 'text-slate-900' : 'text-slate-400 italic'}`}>
-                {item.value || 'Pending answer...'}
-              </p>
             </div>
           );
         })}

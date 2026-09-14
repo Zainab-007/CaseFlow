@@ -1,14 +1,32 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import PatientQueueTable from '../../components/doctor/PatientQueueTable';
 import Card, { CardContent } from '../../components/ui/Card';
 import Alert from '../../components/ui/Alert';
-import { MOCK_PATIENTS_QUEUE } from '../../data/mockData';
+import { patientService } from '../../services/patientService';
 import { Users, ShieldAlert, Clock, Search, Filter, Stethoscope, RefreshCw } from 'lucide-react';
 
 export default function DoctorDashboardPage() {
-  const [patients, setPatients] = useState(MOCK_PATIENTS_QUEUE);
+  const [patients, setPatients] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterPriority, setFilterPriority] = useState('ALL');
+
+  const fetchQueue = async () => {
+    try {
+      const data = await patientService.getQueue();
+      if (data && Array.isArray(data)) {
+        setPatients(data);
+      }
+    } catch (err) {
+      console.error('Failed to load queue:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchQueue();
+  }, []);
 
   const filteredPatients = patients.filter((p) => {
     const matchesSearch =
@@ -125,6 +143,14 @@ export default function DoctorDashboardPage() {
               {filter}
             </button>
           ))}
+          <button
+            type="button"
+            onClick={fetchQueue}
+            title="Refresh OPD Queue"
+            className="text-xs p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 transition flex items-center gap-1"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+          </button>
         </div>
       </div>
 

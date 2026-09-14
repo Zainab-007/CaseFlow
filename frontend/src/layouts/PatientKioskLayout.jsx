@@ -3,6 +3,7 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import Progress from '../components/ui/Progress';
 import EmergencyHelpModal from '../components/patient/EmergencyHelpModal';
 import { RotateCcw, AlertTriangle, Languages, Building2, HelpCircle } from 'lucide-react';
+import { patientService } from '../services/patientService';
 
 const KIOSK_STEPS = [
   { path: '/patient', label: 'Welcome' },
@@ -25,9 +26,15 @@ export default function PatientKioskLayout() {
 
   const handleRestartSession = () => {
     if (window.confirm('Reset this session? All temporary kiosk information will be cleared for the next patient.')) {
+      patientService.clearCurrentPatient();
       navigate('/patient');
     }
   };
+
+  const isWidePage =
+    location.pathname === '/patient/interview' ||
+    location.pathname === '/patient/documents' ||
+    location.pathname === '/patient/review';
 
   return (
     <div className="flex-1 flex flex-col bg-slate-100 min-h-0 select-none">
@@ -73,8 +80,8 @@ export default function PatientKioskLayout() {
 
       {/* Linear Kiosk Progress Indicator */}
       {location.pathname !== '/patient' && (
-        <div className="bg-white border-b border-slate-200 px-6 py-3">
-          <div className="max-w-4xl mx-auto">
+        <div className="bg-white border-b border-slate-200 px-4 sm:px-6 py-3">
+          <div className={`${isWidePage ? 'max-w-7xl' : 'max-w-4xl'} mx-auto w-full`}>
             <Progress
               currentStep={currentStep}
               totalSteps={KIOSK_STEPS.length}
@@ -85,7 +92,7 @@ export default function PatientKioskLayout() {
       )}
 
       {/* Main Kiosk Viewport */}
-      <div className="flex-1 flex flex-col justify-between p-4 sm:p-8 max-w-4xl mx-auto w-full">
+      <div className={`flex-1 flex flex-col justify-between p-4 sm:p-6 lg:p-8 ${isWidePage ? 'max-w-7xl' : 'max-w-4xl'} mx-auto w-full`}>
         <Outlet />
       </div>
 

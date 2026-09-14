@@ -2,6 +2,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import Button from '../../components/ui/Button';
 import AudioPromptBar from '../../components/patient/AudioPromptBar';
+import { patientService } from '../../services/patientService';
 import { Play, Mic, ShieldCheck, Languages, ArrowRight, HeartPulse } from 'lucide-react';
 
 export default function WelcomePage() {
@@ -72,7 +73,10 @@ export default function WelcomePage() {
           size="kiosk-xl"
           icon={ArrowRight}
           iconPosition="right"
-          onClick={() => navigate('/patient/register')}
+          onClick={() => {
+            patientService.clearCurrentPatient();
+            navigate('/patient/register');
+          }}
           className="w-full py-6 text-2xl"
         >
           Start Intake (शुरू करें)

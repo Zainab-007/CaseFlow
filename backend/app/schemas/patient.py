@@ -15,6 +15,7 @@ class PatientBase(BaseModel):
     abha_id: Optional[str] = Field(None, example="91-4829-1029-4821")
     preferred_language: str = Field(default="Hindi", example="Hindi")
     department: str = Field(default="General Medicine", example="General Medicine")
+    chief_complaint: Optional[str] = Field(None, example="Headache")
 
 
 class PatientCreate(PatientBase):
@@ -43,3 +44,16 @@ class VerificationUpdate(BaseModel):
     status: str = Field(..., example="Verified")  # Verified, Edited, Rejected
     notes: Optional[str] = Field(None, example="Agreed with patient-reported dyspnea. Added ECG requisition.")
     doctor_id: Optional[str] = Field(default="Dr. S. K. Mehta", example="Dr. S. K. Mehta")
+
+
+class PatientUpdate(BaseModel):
+    name: Optional[str] = None
+    age: Optional[int] = None
+    gender: Optional[str] = None
+    phone: Optional[str] = None
+    abha_id: Optional[str] = None
+    preferred_language: Optional[str] = None
+    department: Optional[str] = None
+    chief_complaint: Optional[str] = None
+    intake_status: Optional[str] = None
+

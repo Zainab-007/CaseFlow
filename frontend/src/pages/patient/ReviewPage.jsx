@@ -1,13 +1,50 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Button from '../../components/ui/Button';
 import AudioPromptBar from '../../components/patient/AudioPromptBar';
-import { CheckCircle2, Ticket, ArrowLeft, RotateCcw, Clock, MapPin, Printer } from 'lucide-react';
+import { documentService } from '../../services/documentService';
+import { patientService } from '../../services/patientService';
+import {
+  CheckCircle2,
+  Ticket,
+  ArrowLeft,
+  RotateCcw,
+  Clock,
+  MapPin,
+  FileCheck,
+  Pill,
+  Activity
+} from 'lucide-react';
 
 export default function ReviewPage() {
   const navigate = useNavigate();
   const [submitted, setSubmitted] = useState(false);
   const [countdown, setCountdown] = useState(15);
+  const [documents, setDocuments] = useState([]);
+  const [patient, setPatient] = useState(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadData() {
+      try {
+        const patientId = patientService.getCurrentPatientId();
+        const [patData, docs] = await Promise.all([
+          patientService.getPatient(patientId),
+          documentService.getPatientDocuments(patientId)
+        ]);
+        if (isMounted) {
+          setPatient(patData);
+          setDocuments(docs || []);
+        }
+      } catch (err) {
+        console.error('Error fetching review data:', err);
+      }
+    }
+    loadData();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const handleSubmit = () => {
     setSubmitted(true);
@@ -23,6 +60,10 @@ export default function ReviewPage() {
       });
     }, 1000);
   };
+
+  // Compute aggregated extracted entities across confirmed documents
+  const allMeds = documents.flatMap((d) => d.medications || []);
+  const allLabs = documents.flatMap((d) => d.lab_findings || []);
 
   if (submitted) {
     return (
@@ -54,7 +95,7 @@ export default function ReviewPage() {
             <div>
               <p className="text-xs text-slate-500 uppercase font-bold tracking-wider">Queue Token</p>
               <h3 className="text-3xl sm:text-4xl font-black text-teal-900 font-mono">
-                CF-OPD-104
+                {patient?.queue_token || 'CF-OPD-104'}
               </h3>
             </div>
           </div>
@@ -62,11 +103,17 @@ export default function ReviewPage() {
           <div className="space-y-2 border-t border-slate-100 pt-4 text-sm text-slate-700">
             <div className="flex justify-between">
               <span className="text-slate-500">Patient:</span>
-              <strong className="text-slate-900">Ramesh Chandra Sharma (62y / M)</strong>
+              <strong className="text-slate-900">
+                {patient?.name || patient?.demographics?.name || 'Patient'} ({patient?.age || patient?.demographics?.age || '—'}y / {patient?.gender?.[0] || '—'})
+              </strong>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500">Department:</span>
-              <strong className="text-slate-900">General Medicine (OPD Desk 4)</strong>
+              <strong className="text-slate-900">{patient?.department || 'General Medicine'} (OPD Desk 4)</strong>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Attached Documents:</span>
+              <strong className="text-slate-900">{documents.length} Records OCR-Indexed</strong>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500">Assigned Room:</span>
@@ -117,38 +164,85 @@ export default function ReviewPage() {
             Review Information (जानकारी की समीक्षा)
           </h2>
           <p className="text-sm text-slate-500 mt-1">
-            Confirm your answers. You can go back if you need to make any changes.
+            Confirm your answers and scanned records before doctor submission.
           </p>
         </div>
 
         <div className="space-y-3 text-sm">
+          {/* Patient Identity */}
           <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200">
             <span className="text-xs font-bold uppercase tracking-wider text-slate-400 block mb-1">
               Patient Identity (रोगी)
             </span>
-            <p className="text-lg font-bold text-slate-900">Ramesh Chandra Sharma, 62 Years (Male)</p>
-            <p className="text-xs text-slate-500 font-mono mt-0.5">ABHA ID: 91-4829-1029-4821</p>
+            <p className="text-lg font-bold text-slate-900">
+              {patient?.name || patient?.demographics?.name || 'Patient'}{patient?.age ? `, ${patient.age} Years` : ''} ({patient?.gender || '—'})
+            </p>
+            <p className="text-xs text-slate-500 font-mono mt-0.5">
+              ABHA ID: {patient?.abha_id || patient?.demographics?.abha_id || 'Not linked'}
+            </p>
           </div>
 
+          {/* Primary Symptoms */}
           <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200">
             <span className="text-xs font-bold uppercase tracking-wider text-slate-400 block mb-1">
               Primary Symptom & Duration (लक्षण और अवधि)
             </span>
             <p className="text-base font-bold text-slate-900">
-              Productive cough and breathlessness on walking (10 days duration)
+              {patient?.chief_complaint || 'General consultation'}
             </p>
             <span className="inline-block mt-1 text-xs font-semibold px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-200">
-              Severity: Moderate (Affects Daily Work)
+              Severity: Moderate to Severe (Affects Daily Work)
             </span>
           </div>
 
-          <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400 block mb-1">
-              Medical Records Attached (संलग्न रिकॉर्ड)
-            </span>
+          {/* Attached Medical Records & OCR Extractions */}
+          <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-400 block">
+                Medical Records Attached (संलग्न रिकॉर्ड — {documents.length})
+              </span>
+              <span className="text-[11px] font-bold text-teal-800 bg-teal-100/80 px-2 py-0.5 rounded">
+                OCR Indexed
+              </span>
+            </div>
+
             <p className="text-sm font-semibold text-slate-800">
-              2 Documents: Previous OPD Prescription + CBC/HbA1c Lab Report
+              {documents.length > 0
+                ? documents.map((d) => d.title || d.file_name).join(' • ')
+                : 'No prior documents attached'}
             </p>
+
+            {/* Extracted medication tags */}
+            {allMeds.length > 0 && (
+              <div className="pt-2 border-t border-slate-200/70">
+                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1 flex items-center gap-1">
+                  <Pill className="w-3 h-3 text-teal-700" /> Extracted Medications:
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {allMeds.slice(0, 4).map((m, i) => (
+                    <span key={i} className="text-xs font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200">
+                      {m.name} {m.dose || ''}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Extracted lab values tags */}
+            {allLabs.length > 0 && (
+              <div className="pt-2 border-t border-slate-200/70">
+                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1 flex items-center gap-1">
+                  <Activity className="w-3 h-3 text-blue-700" /> Key Lab Findings:
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {allLabs.slice(0, 3).map((l, i) => (
+                    <span key={i} className="text-xs font-bold px-2 py-0.5 rounded-md bg-blue-50 text-blue-800 border border-blue-200">
+                      {l.parameter}: {l.value} {l.unit || ''}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -161,7 +255,7 @@ export default function ReviewPage() {
           icon={ArrowLeft}
           onClick={() => navigate('/patient/documents')}
         >
-          Back
+          Back to Documents
         </Button>
 
         <Button

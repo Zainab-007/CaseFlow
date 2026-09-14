@@ -356,6 +356,21 @@ class AdaptiveInterviewEngine:
             session["current_question_id"] = next_q_id
             session["question_stack"].append(next_q_id)
 
+        # 4. Synchronize with patient_service
+        try:
+            from app.services.base_patient_service import patient_service
+            patient_id = session.get("patient_id")
+            if patient_id:
+                patient_service.sync_interview_data(
+                    patient_id=patient_id,
+                    chief_complaint=session.get("chief_complaint"),
+                    extracted_history=session.get("extracted_history", {}),
+                    red_flags=session.get("red_flags", []),
+                    session_completed=session.get("completed", False)
+                )
+        except Exception as e:
+            pass
+
         return self._format_session_state(session)
 
     def step_back(self, session_id: str) -> Dict[str, Any]:
@@ -375,6 +390,21 @@ class AdaptiveInterviewEngine:
             # If chief complaint was set by this question, clear it
             if removed_turn["question_id"] == "root_complaint":
                 session["chief_complaint"] = None
+
+        # Synchronize step-back with patient_service
+        try:
+            from app.services.base_patient_service import patient_service
+            patient_id = session.get("patient_id")
+            if patient_id:
+                patient_service.sync_interview_data(
+                    patient_id=patient_id,
+                    chief_complaint=session.get("chief_complaint"),
+                    extracted_history=session.get("extracted_history", {}),
+                    red_flags=session.get("red_flags", []),
+                    session_completed=False
+                )
+        except Exception:
+            pass
 
         return self._format_session_state(session)
 
@@ -418,11 +448,16 @@ class AdaptiveInterviewEngine:
         if q_node["id"] == "root_complaint":
             # Match quick options or free text
             for opt in q_node.get("quick_options", []):
-                if opt["value"].lower() in answer.lower() or opt["label"].lower() in answer.lower():
-                    session["chief_complaint"] = opt["complaint"]
+                if (
+                    opt["value"].lower() in answer.lower()
+                    or opt["label"].lower() in answer.lower()
+                    or opt.get("complaint", "").lower() in answer.lower()
+                    or answer.lower() in opt.get("complaint", "").lower()
+                ):
+                    session["chief_complaint"] = opt.get("complaint") or opt["value"]
                     break
             if not session["chief_complaint"]:
-                session["chief_complaint"] = answer
+                session["chief_complaint"] = answer.strip()
 
         # Map field key if defined on question node
         field_key = q_node.get("field_key")

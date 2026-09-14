@@ -1,133 +1,178 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Button from '../../components/ui/Button';
 import AudioPromptBar from '../../components/patient/AudioPromptBar';
-import { ArrowRight, ArrowLeft, Camera, UploadCloud, FileText, CheckCircle2, Trash2 } from 'lucide-react';
+import DocumentUploadZone from '../../components/patient/DocumentUploadZone';
+import DocumentCard from '../../components/patient/DocumentCard';
+import ExtractionPreviewModal from '../../components/patient/ExtractionPreviewModal';
+import { documentService } from '../../services/documentService';
+import { patientService } from '../../services/patientService';
+import {
+  ArrowRight,
+  ArrowLeft,
+  FileCheck2,
+  Sparkles,
+  ShieldCheck,
+  CheckCircle2
+} from 'lucide-react';
 
 export default function DocumentsPage() {
   const navigate = useNavigate();
-  const [scannedFiles, setScannedFiles] = useState([
-    {
-      id: 'doc-1',
-      name: 'Previous_OPD_Prescription.jpg',
-      type: 'Prescription Slip',
-      status: 'OCR Ready',
-      extractedText: 'Extracted: Tab. Telmisartan 40mg OD, Tab. Metformin 500mg BD',
-    },
-    {
-      id: 'doc-2',
-      name: 'CBC_Lab_Report_Aug.pdf',
-      type: 'Laboratory Blood Report',
-      status: 'OCR Ready',
-      extractedText: 'Extracted: Hb 11.2 g/dL, HbA1c 7.4%, Platelets 220k',
+  const [documents, setDocuments] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [selectedDocForPreview, setSelectedDocForPreview] = useState(null);
+
+  // Load patient documents on mount
+  useEffect(() => {
+    let isMounted = true;
+    async function loadDocs() {
+      try {
+        const patientId = patientService.getCurrentPatientId() || 'CF-2026-001';
+        const docs = await documentService.getPatientDocuments(patientId);
+        if (isMounted) {
+          setDocuments(docs || []);
+          setLoading(false);
+        }
+      } catch (err) {
+        console.error('Error fetching documents:', err);
+        if (isMounted) setLoading(false);
+      }
     }
-  ]);
-
-  const handleSimulateScan = () => {
-    const newDoc = {
-      id: `doc-${scannedFiles.length + 1}`,
-      name: `Physical_Slip_Scan_${scannedFiles.length + 1}.jpg`,
-      type: 'Medical Record Scan',
-      status: 'OCR Scanned',
-      extractedText: 'Extracted: OPD consultation note with blood pressure recording 148/92',
+    loadDocs();
+    return () => {
+      isMounted = false;
     };
-    setScannedFiles([...scannedFiles, newDoc]);
+  }, []);
+
+  // Handle new document upload / scan
+  const handleFileUpload = async (file) => {
+    setIsProcessing(true);
+    try {
+      const patientId = patientService.getCurrentPatientId() || 'CF-2026-001';
+      const newDoc = await documentService.uploadDocument(file, patientId);
+      if (newDoc) {
+        setDocuments((prev) => [newDoc, ...prev]);
+        // Automatically pop up extraction preview so patient can verify!
+        setSelectedDocForPreview(newDoc);
+      }
+    } catch (err) {
+      console.error('Document processing error:', err);
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
-  const handleRemoveDoc = (id) => {
-    setScannedFiles(scannedFiles.filter((d) => d.id !== id));
+  // Handle document confirmation and corrections
+  const handleConfirmExtraction = async (documentId, updates) => {
+    try {
+      const updated = await documentService.confirmDocument(documentId, updates);
+      if (updated) {
+        setDocuments((prev) =>
+          prev.map((d) => (d.document_id === documentId ? updated : d))
+        );
+      }
+    } catch (err) {
+      console.error('Error confirming document extraction:', err);
+    }
   };
+
+  // Handle document deletion
+  const handleDeleteDoc = async (documentId) => {
+    try {
+      await documentService.deleteDocument(documentId);
+      setDocuments((prev) => prev.filter((d) => d.document_id !== documentId));
+    } catch (err) {
+      console.error('Error deleting document:', err);
+    }
+  };
+
+  const confirmedCount = documents.filter((d) => d.confirmed).length;
 
   return (
-    <div className="flex-1 flex flex-col justify-between max-w-3xl mx-auto w-full py-2 space-y-6">
+    <div className="flex-1 flex flex-col justify-between max-w-4xl mx-auto w-full py-2 space-y-6">
+      {/* Audio narration guidance bar */}
       <AudioPromptBar
         text="Place any previous doctor prescriptions or lab reports on the kiosk scanner."
         hindiText="कृपया अपनी पुरानी पर्ची या जांच रिपोर्ट कियोस्क स्कैनर पर रखें।"
       />
 
+      {/* Main Container */}
       <div className="bg-white rounded-3xl p-6 sm:p-8 border-2 border-slate-200 shadow-sm space-y-6">
-        <div>
-          <h2 className="text-2xl sm:text-3xl font-black text-slate-900">
-            Medical Documents & Scans (कागज़ात और रिपोर्ट)
-          </h2>
-          <p className="text-sm text-slate-500 mt-1">
-            CaseFlow's OCR module extracts medicines, tests, and diagnoses from prior physical papers.
-          </p>
+        {/* Page Title & Clinical Subheading */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+          <div>
+            <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+              Medical Documents & OCR (कागज़ात और जांच)
+            </h2>
+            <p className="text-xs sm:text-sm text-slate-500 font-semibold mt-0.5">
+              CaseFlow's OCR module extracts medicines, tests, and diagnoses from prior physical papers.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-1.5 px-3 py-1 bg-teal-50 border border-teal-200 rounded-full text-xs font-bold text-teal-800 shrink-0">
+            <FileCheck2 className="w-4 h-4 text-teal-700" />
+            <span>{documents.length} Records Attached ({confirmedCount} Verified)</span>
+          </div>
         </div>
 
         {/* Big Kiosk Scan Button / Dropzone */}
-        <div
-          onClick={handleSimulateScan}
-          className="border-3 border-dashed border-teal-300 hover:border-teal-500 bg-teal-50/50 hover:bg-teal-50 rounded-3xl p-8 text-center cursor-pointer transition active:scale-[0.99] select-none"
-        >
-          <div className="w-16 h-16 rounded-2xl bg-teal-700 text-white flex items-center justify-center mx-auto shadow-md mb-3">
-            <Camera className="w-8 h-8" />
+        <DocumentUploadZone
+          onFileUpload={handleFileUpload}
+          isProcessing={isProcessing}
+        />
+
+        {/* Attached & OCR-Extracted Document List */}
+        <div className="space-y-3 pt-2">
+          <div className="flex items-center justify-between">
+            <h4 className="text-xs font-black uppercase tracking-wider text-slate-500">
+              Attached Medical Records ({documents.length})
+            </h4>
+            <span className="text-[11px] font-semibold text-slate-400">
+              Tap review on any card to edit extracted items
+            </span>
           </div>
-          <h3 className="text-xl sm:text-2xl font-bold text-slate-900">
-            Tap to Scan Paper (कागज़ स्कैन करने के लिए दबाएं)
-          </h3>
-          <p className="text-sm text-slate-600 font-medium mt-1">
-            Place paper slip facing down on the scanner glass or tap to attach document
-          </p>
-          <span className="inline-block mt-3 text-xs font-bold text-teal-800 bg-teal-200/80 px-3 py-1 rounded-full">
-            + Add Document
-          </span>
+
+          {loading ? (
+            <div className="p-8 text-center text-xs font-bold text-slate-500">
+              Loading attached records...
+            </div>
+          ) : documents.length === 0 ? (
+            <div className="p-8 text-center border-2 border-dashed border-slate-200 rounded-3xl text-slate-400 font-medium text-xs">
+              No previous documents scanned yet. You can scan papers above or continue to review.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {documents.map((doc) => (
+                <DocumentCard
+                  key={doc.document_id}
+                  document={doc}
+                  onInspect={(d) => setSelectedDocForPreview(d)}
+                  onDelete={handleDeleteDoc}
+                />
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* Extracted Document List */}
-        {scannedFiles.length > 0 && (
-          <div className="space-y-3 pt-2">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-              Attached Documents ({scannedFiles.length})
-            </h4>
-
-            {scannedFiles.map((doc) => (
-              <div
-                key={doc.id}
-                className="p-4 rounded-2xl border border-slate-200 bg-slate-50 flex items-start justify-between gap-3"
-              >
-                <div className="flex items-start gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-teal-100 text-teal-800 flex items-center justify-center shrink-0 mt-0.5 font-bold">
-                    <FileText className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-bold text-slate-900">{doc.name}</span>
-                      <span className="text-[11px] font-semibold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full flex items-center gap-1">
-                        <CheckCircle2 className="w-3 h-3" />
-                        {doc.status}
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-500 mt-0.5">{doc.type}</p>
-                    <p className="text-xs text-teal-900 bg-teal-50 border border-teal-200 rounded-md p-1.5 mt-2 font-mono">
-                      {doc.extractedText}
-                    </p>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => handleRemoveDoc(doc.id)}
-                  className="p-2 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-white transition"
-                  title="Remove"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
+        {/* Privacy & Non-diagnostic reassurance notice */}
+        <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl flex items-center gap-2 text-xs text-slate-600 font-medium">
+          <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+          <span>
+            Scanned physical papers are digitized on-device with privacy protection and are attached to your OPD visit token for the doctor's review.
+          </span>
+        </div>
       </div>
 
-      {/* Navigation Buttons */}
-      <div className="flex items-center justify-between gap-4 pt-2">
+      {/* Navigation Bar */}
+      <div className="flex items-center justify-between gap-4 pt-1">
         <Button
           variant="outline"
           size="lg"
           icon={ArrowLeft}
           onClick={() => navigate('/patient/interview')}
         >
-          Back
+          Previous (पिछला)
         </Button>
 
         <Button
@@ -136,11 +181,19 @@ export default function DocumentsPage() {
           icon={ArrowRight}
           iconPosition="right"
           onClick={() => navigate('/patient/review')}
-          className="min-w-[200px]"
+          className="min-w-[220px]"
         >
           Review & Submit (समीक्षा करें)
         </Button>
       </div>
+
+      {/* Extraction Preview & Correction Modal */}
+      <ExtractionPreviewModal
+        isOpen={!!selectedDocForPreview}
+        document={selectedDocForPreview}
+        onClose={() => setSelectedDocForPreview(null)}
+        onConfirm={handleConfirmExtraction}
+      />
     </div>
   );
 }
