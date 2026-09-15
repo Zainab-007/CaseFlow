@@ -414,8 +414,242 @@ export const QUESTION_ONTOLOGY = {
       }
     ],
     is_terminal: true
+  },
+
+  // ==========================================
+  // BLEEDING SYMPTOM BRANCH
+  // ==========================================
+  bleeding_onset: {
+    id: 'bleeding_onset',
+    branch_badge: 'Adaptive Branch: Bleeding Assessment',
+    question: 'When did you first notice the bleeding, and is it continuous or intermittent?',
+    hindi_question: 'रक्तस्राव (खून आना) कब शुरू हुआ, और क्या यह लगातार हो रहा है?',
+    audio_hint: 'Tell us how long you have observed this bleeding.',
+    audio_hint_hi: 'बताएं कि रक्तस्राव कब शुरू हुआ था।',
+    input_type: 'choice',
+    field_key: 'onset',
+    quick_options: [
+      { label: 'Started suddenly today (< 24 hours)', hindi: 'आज अचानक शुरू हुआ (24 घंटे के अंदर)', value: 'Acute onset today (<24h)' },
+      { label: 'Ongoing for 2 to 3 days', hindi: '2-3 दिन से हो रहा है', value: '2-3 days' },
+      { label: 'Comes and goes intermittently', hindi: 'रुक-रुक कर कभी-कभी होता है', value: 'Intermittent episodes' },
+      { label: 'Chronic / Happening for weeks', hindi: 'हफ्तों से बार-बार हो रहा है', value: 'Chronic (>2 weeks)' }
+    ],
+    next_question: 'bleeding_severity'
+  },
+  bleeding_severity: {
+    id: 'bleeding_severity',
+    branch_badge: 'Adaptive Branch: Bleeding Assessment',
+    question: 'How would you describe the amount or intensity of bleeding?',
+    hindi_question: 'रक्तस्राव की मात्रा या स्थिति कैसी है?',
+    audio_hint: 'Select whether it is spotting, moderate, or heavy bleeding.',
+    audio_hint_hi: 'बताएं कि रक्तस्राव हल्का है या भारी।',
+    input_type: 'choice',
+    field_key: 'severity',
+    quick_options: [
+      { label: 'Mild spotting or light staining', hindi: 'हल्के धब्बे या बहुत कम मात्रा', value: 'Mild spotting' },
+      { label: 'Moderate steady bleeding', hindi: 'मध्यम प्रवाह', value: 'Moderate bleeding' },
+      { label: '⚠️ Heavy / Continuous bleeding or passing clots', hindi: 'भारी या लगातार रक्तस्राव / थक्के आना', value: 'Heavy active bleeding (Red Flag)', is_red_flag: true }
+    ],
+    next_question: 'bleeding_associated'
+  },
+  bleeding_associated: {
+    id: 'bleeding_associated',
+    branch_badge: 'Adaptive Branch: Bleeding Assessment',
+    question: 'Are you experiencing any of these accompanying symptoms?',
+    hindi_question: 'क्या आपको साथ में इनमें से कोई अन्य लक्षण भी हैं?',
+    audio_hint: 'Select any other symptoms such as severe pain, dizziness, or fever.',
+    audio_hint_hi: 'अन्य लक्षण चुनें जैसे चक्कर, तेज़ दर्द या बुखार।',
+    input_type: 'choice',
+    field_key: 'associatedSymptoms',
+    quick_options: [
+      { label: 'Severe pain or abdominal/pelvic cramping', hindi: 'तेज़ दर्द या मरोड़', value: 'Severe pain / cramping' },
+      { label: '⚠️ Dizziness, lightheadedness, or feeling faint', hindi: 'चक्कर आना या बेहोशी जैसा लगना', value: 'Dizziness / Presyncope (Red Flag)', is_red_flag: true },
+      { label: 'Fever, chills, or foul odor', hindi: 'बुखार, कंपकंपी या दुर्गंध', value: 'Fever or chills' },
+      { label: 'None of the above', hindi: 'इनमें से कोई नहीं', value: 'No associated symptoms' }
+    ],
+    next_question: 'abdo_medications'
+  },
+
+  // ==========================================
+  // FEVER BRANCH
+  // ==========================================
+  fever_pattern: {
+    id: 'fever_pattern',
+    branch_badge: 'Adaptive Branch: Febrile Pattern',
+    question: 'How long has the fever lasted and does it come with chills?',
+    hindi_question: 'बुखार कितने दिनों से है और क्या यह ठंड लगकर आता है?',
+    input_type: 'choice',
+    field_key: 'timing',
+    quick_options: [
+      { label: '2-3 days with chills / shivering', hindi: '2-3 दिन से ठंड लगकर', value: '2-3 days with chills' },
+      { label: 'High continuous fever for 1 week', hindi: '1 हफ्ते से लगातार तेज़ बुखार', value: 'Continuous fever (1 week)' },
+      { label: 'Low fever mainly in evenings', hindi: 'हल्का बुखार, शाम को ज़्यादा', value: 'Evening low-grade fever' }
+    ],
+    next_question: 'abdo_severity'
+  },
+
+  // ==========================================
+  // CHEST PAIN BRANCH
+  // ==========================================
+  chest_character: {
+    id: 'chest_character',
+    branch_badge: 'Adaptive Branch: Chest Discomfort',
+    question: 'How does the chest discomfort feel?',
+    hindi_question: 'सीने में दर्द किस तरह का महसूस हो रहा है?',
+    input_type: 'choice',
+    field_key: 'character',
+    quick_options: [
+      { label: '⚠️ Heavy pressure / Squeezing', hindi: 'भारी दबाव या जकड़न', value: 'Retrosternal pressure', is_red_flag: true },
+      { label: 'Sharp on deep breath / coughing', hindi: 'गहरी सांस लेने पर चुभन', value: 'Pleuritic sharp' },
+      { label: 'Burning in center of chest', hindi: 'सीने के बीच में जलन', value: 'Retrosternal burning' }
+    ],
+    next_question: 'abdo_severity'
+  },
+
+  // ==========================================
+  // COUGH BRANCH
+  // ==========================================
+  cough_type: {
+    id: 'cough_type',
+    branch_badge: 'Adaptive Branch: Respiratory Pattern',
+    question: 'Is the cough dry or producing sputum/phlegm?',
+    hindi_question: 'क्या खांसी सूखी है या बलगम आ रहा है?',
+    input_type: 'choice',
+    field_key: 'character',
+    quick_options: [
+      { label: 'Dry cough (सूखी खांसी)', hindi: 'सूखी खांसी', value: 'Dry cough' },
+      { label: 'Productive with white/yellow sputum', hindi: 'बलगम वाली खांसी', value: 'Productive cough' },
+      { label: '⚠️ Sputum with blood streaks', hindi: 'बलगम में खून के अंश', value: 'Hemoptysis (Red Flag)', is_red_flag: true }
+    ],
+    next_question: 'abdo_severity'
+  },
+
+  // ==========================================
+  // HEADACHE BRANCH
+  // ==========================================
+  headache_type: {
+    id: 'headache_type',
+    branch_badge: 'Adaptive Branch: Cephalea Pattern',
+    question: 'Where is the headache located and what does it feel like?',
+    hindi_question: 'सिरदर्द कहाँ है और कैसा महसूस होता है?',
+    input_type: 'choice',
+    field_key: 'site',
+    quick_options: [
+      { label: 'One side of head, throbbing', hindi: 'एक तरफ धड़कता हुआ', value: 'Unilateral throbbing' },
+      { label: 'Forehead and temples, pressing band', hindi: 'माथे और कनपटी पर भारीपन', value: 'Frontal tension' },
+      { label: "⚠️ Sudden severe 'worst headache of life'", hindi: 'अचानक बहुत तेज़ भयानक सिरदर्द', value: 'Thunderclap headache (Red Flag)', is_red_flag: true }
+    ],
+    next_question: 'abdo_severity'
+  },
+
+  // ==========================================
+  // GENERIC CLARIFICATION BRANCH (Safe Fallback)
+  // ==========================================
+  generic_onset: {
+    id: 'generic_onset',
+    branch_badge: 'Adaptive Branch: Symptom Assessment',
+    question: 'When did your symptoms first begin?',
+    hindi_question: 'आपकी यह परेशानी सबसे पहले कब शुरू हुई थी?',
+    audio_hint: 'Select how long you have experienced this issue.',
+    audio_hint_hi: 'बताएं कि यह परेशानी कब से है।',
+    input_type: 'choice',
+    field_key: 'onset',
+    quick_options: [
+      { label: 'Today / Suddenly in the last 24 hours', hindi: 'आज अचानक (24 घंटे के अंदर)', value: 'Acute (<24 hours)' },
+      { label: 'A few days ago (2 - 5 days)', hindi: 'कुछ दिन पहले (2-5 दिन)', value: '2-5 days ago' },
+      { label: 'About 1 to 2 weeks ago', hindi: 'लगभग 1-2 हफ्ते पहले', value: '1-2 weeks ago' },
+      { label: 'Ongoing for more than a month', hindi: 'एक महीने से अधिक समय से', value: 'Chronic (>1 month)' }
+    ],
+    next_question: 'generic_character'
+  },
+  generic_character: {
+    id: 'generic_character',
+    branch_badge: 'Adaptive Branch: Symptom Assessment',
+    question: 'How would you describe the nature of this discomfort?',
+    hindi_question: 'इस परेशानी का स्वरूप कैसा है?',
+    audio_hint: 'Choose the description that closest matches your feeling.',
+    audio_hint_hi: 'जो वर्णन सबसे सही लगे उसे चुनें।',
+    input_type: 'choice',
+    field_key: 'character',
+    quick_options: [
+      { label: 'Continuous and persistent', hindi: 'लगातार बना रहता है', value: 'Continuous persistent' },
+      { label: 'Comes and goes intermittently', hindi: 'रुक-रुक कर कभी-कभी होता है', value: 'Intermittent / episodic' },
+      { label: 'Progressively worsening over time', hindi: 'समय के साथ लगातार बढ़ रहा है', value: 'Progressively worsening' },
+      { label: 'Mild discomfort without sharp pain', hindi: 'हल्की बेचैनी', value: 'Mild discomfort' }
+    ],
+    next_question: 'generic_severity'
+  },
+  generic_severity: {
+    id: 'generic_severity',
+    branch_badge: 'Adaptive Branch: Symptom Assessment',
+    question: 'How significantly is this affecting your daily routine?',
+    hindi_question: 'इस तकलीफ़ का आपकी दिनचर्या पर कितना असर पड़ रहा है?',
+    audio_hint: 'Select the severity impact on your routine.',
+    audio_hint_hi: 'अपने तकलीफ़ के स्तर का चुनाव करें।',
+    input_type: 'choice',
+    field_key: 'severity',
+    quick_options: [
+      { label: 'Mild — Can carry out all daily activities', hindi: 'हल्का (दैनिक कार्य सामान्य रूप से संभव)', value: 'Mild (3/10)' },
+      { label: 'Moderate — Interferes with work or sleep', hindi: 'मध्यम (काम या नींद में रुकावट)', value: 'Moderate (6/10)' },
+      { label: 'Severe — Unable to perform normal tasks', hindi: 'गंभीर (सामान्य कामकाज में असमर्थ)', value: 'Severe (8/10)' },
+      { label: '⚠️ Extreme / Acute emergency', hindi: 'अति गंभीर / आपातकालीन स्तर', value: 'Extreme (10/10)', is_red_flag: true }
+    ],
+    next_question: 'generic_associated'
+  },
+  generic_associated: {
+    id: 'generic_associated',
+    branch_badge: 'Adaptive Branch: Symptom Assessment',
+    question: 'Do you have any accompanying high-priority symptoms?',
+    hindi_question: 'क्या आपको साथ में इनमें से कोई अन्य आपात लक्षण हैं?',
+    audio_hint: 'Select any accompanying red-flag symptoms.',
+    audio_hint_hi: 'अन्य आपात लक्षण चुनें।',
+    input_type: 'choice',
+    field_key: 'associatedSymptoms',
+    quick_options: [
+      { label: '⚠️ Difficulty breathing or chest heaviness', hindi: 'सांस लेने में तकलीफ़ या सीने में भारीपन', value: 'Dyspnea / Chest heaviness (Red Flag)', is_red_flag: true },
+      { label: '⚠️ Altered sensorium, severe weakness, or fainting', hindi: 'अत्यधिक कमजोरी, चक्कर या बेहोशी', value: 'Altered sensorium / Presyncope (Red Flag)', is_red_flag: true },
+      { label: 'Fever, vomiting, or diarrhea', hindi: 'बुखार, उल्टी या दस्त', value: 'Fever / Vomiting' },
+      { label: 'None of the above', hindi: 'इनमें से कोई नहीं', value: 'No associated symptoms' }
+    ],
+    next_question: 'abdo_medications'
   }
 };
+
+/**
+ * Broad intent mapping: classifies free-text chief complaints into clinical question pathways.
+ * Does NOT diagnose diseases. Falls back safely to generic clarification.
+ */
+export function classifySymptomIntent(text) {
+  if (!text || !String(text).trim()) return 'root_complaint';
+  const t = String(text).toLowerCase();
+
+  // 1. Bleeding / Hemorrhage symptoms
+  if (['bleed', 'blood', 'khoon', 'hemorrhage', 'spotting', 'hematuria', 'intimate', 'discharge', 'cut', 'wound'].some((k) => t.includes(k))) {
+    return 'bleeding_onset';
+  }
+  // 2. Chest discomfort / Cardiac
+  if (['chest', 'seena', 'heart', 'angina', 'retrosternal', 'palpitation', 'crushing'].some((k) => t.includes(k))) {
+    return 'chest_character';
+  }
+  // 3. Respiratory / Cough
+  if (['cough', 'khansi', 'sputum', 'balgam', 'phlegm', 'wheez', 'saans', 'breathless'].some((k) => t.includes(k))) {
+    return 'cough_type';
+  }
+  // 4. Fever / Systemic chills
+  if (['fever', 'bukhar', 'chill', 'shiver', 'thand', 'temperature', 'tap'].some((k) => t.includes(k))) {
+    return 'fever_pattern';
+  }
+  // 5. Headache / Neurological
+  if (['headache', 'sir dard', 'sar dard', 'migrain', 'head pain', 'sir me dard', 'sar me dard'].some((k) => t.includes(k))) {
+    return 'headache_type';
+  }
+  // 6. Abdominal / GI pain symptoms (SOCRATES)
+  if (['stomach', 'abdominal', 'abdomen', 'pet', 'dard', 'belly', 'cramp', 'gastric', 'acid', 'burning', 'colic', 'pain'].some((k) => t.includes(k))) {
+    return 'abdo_site';
+  }
+  // 7. Safe generic clarification pathway for all other unknown complaints
+  return 'generic_onset';
+}
 
 /**
  * Helper to get default initial state

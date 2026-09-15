@@ -75,7 +75,11 @@ export const documentService = {
   /**
    * Upload a physical scan or digital PDF/image file for OCR extraction
    */
-  async uploadDocument(file, patientId = 'CF-2026-001', documentType = null) {
+  async uploadDocument(file, patientId, documentType = null) {
+    if (!patientId) {
+      console.error('uploadDocument requires a valid patientId');
+      return null;
+    }
     try {
       const formData = new FormData();
       if (file) {
@@ -142,9 +146,11 @@ export const documentService = {
   },
 
   /**
-   * Retrieve all documents attached to a patient
+   * Retrieve all documents attached to a specific patient
+   * Guarantees patient isolation: never returns another patient's documents.
    */
-  async getPatientDocuments(patientId = 'CF-2026-001') {
+  async getPatientDocuments(patientId) {
+    if (!patientId) return [];
     try {
       const response = await fetch(`${API_BASE_URL}/patient/${patientId}`);
       if (response.ok) {
@@ -153,7 +159,8 @@ export const documentService = {
     } catch (err) {
       console.warn('Backend document list error, using client fallback:', err.message);
     }
-    return clientFallbackDocuments;
+    // Strictly isolate by patient_id: never leak demo documents
+    return clientFallbackDocuments.filter((d) => d.patient_id === patientId);
   },
 
   /**

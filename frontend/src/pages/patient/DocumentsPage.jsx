@@ -28,14 +28,20 @@ export default function DocumentsPage() {
     let isMounted = true;
     async function loadDocs() {
       try {
-        const patientId = patientService.getCurrentPatientId() || 'CF-2026-001';
-        const docs = await documentService.getPatientDocuments(patientId);
-        if (isMounted) {
-          setDocuments(docs || []);
-          setLoading(false);
+        const patientId = patientService.getCurrentPatientId();
+        if (patientId) {
+          const docs = await documentService.getPatientDocuments(patientId);
+          if (isMounted) {
+            setDocuments(docs || []);
+          }
+        } else {
+          if (isMounted) {
+            setDocuments([]);
+          }
         }
       } catch (err) {
         console.error('Error fetching documents:', err);
+      } finally {
         if (isMounted) setLoading(false);
       }
     }
@@ -49,7 +55,11 @@ export default function DocumentsPage() {
   const handleFileUpload = async (file) => {
     setIsProcessing(true);
     try {
-      const patientId = patientService.getCurrentPatientId() || 'CF-2026-001';
+      const patientId = patientService.getCurrentPatientId();
+      if (!patientId) {
+        console.warn('Cannot upload document: No active patient in session');
+        return;
+      }
       const newDoc = await documentService.uploadDocument(file, patientId);
       if (newDoc) {
         setDocuments((prev) => [newDoc, ...prev]);

@@ -649,6 +649,7 @@ export default function PatientDetailPage() {
 
       {/* Doctor Bottom Verification & Authority Bar */}
       <VerificationActionBar
+        patient={patient}
         patientId={patient.id}
         currentStatus={verificationStatus}
         onStatusChange={handleStatusChange}

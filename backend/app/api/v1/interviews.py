@@ -25,7 +25,8 @@ async def start_adaptive_interview(payload: StartSessionRequest):
     """
     return interview_engine.start_session(
         patient_id=payload.patient_id,
-        language=payload.language
+        language=payload.language,
+        chief_complaint=payload.chief_complaint
     )
 
 

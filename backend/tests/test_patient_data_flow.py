@@ -151,8 +151,61 @@ def test_complete_patient_data_flow_and_isolation():
     assert len(ramesh.get("documents", [])) >= 2, "Ramesh's original documents must remain attached"
     print("CF-2026-001 seeded demo clinical history is completely intact!")
 
+    # STEP 10: Register second new patient (Rahul Demo, 35, Male, Fever) & verify mutual isolation
+    print("\n--- STEP 10: Register Rahul Demo and verify mutual isolation with Zainab Demo ---")
+    rahul_payload = {
+        "name": "Rahul Demo",
+        "age": 35,
+        "gender": "Male",
+        "phone": "+91 91234 56789",
+        "abha_id": "91-2026-8888-0002",
+        "chief_complaint": "Fever",
+        "department": "General Medicine",
+        "preferred_language": "Hindi"
+    }
+    rahul_res = client.post("/api/v1/patients/register", json=rahul_payload)
+    assert rahul_res.status_code == 200, f"Rahul registration failed: {rahul_res.text}"
+    rahul = rahul_res.json()
+    rahul_id = rahul["id"]
+    print(f"Registered second patient: id={rahul_id}, name={rahul['name']}")
+    assert rahul_id != patient_id, "Rahul must have a distinct patient ID from Zainab"
+    assert rahul["name"] == "Rahul Demo"
+    assert rahul["age"] == 35
+    assert rahul["chief_complaint"] == "Fever"
+
+    # Start interview for Rahul
+    rahul_session_res = client.post("/api/v1/interviews/start", json={"patient_id": rahul_id, "language": "hi"})
+    assert rahul_session_res.status_code == 200
+    rahul_session_id = rahul_session_res.json()["session_id"]
+    assert rahul_session_res.json()["patient_id"] == rahul_id
+
+    # Rahul answers "Fever & Chills"
+    rahul_ans_res = client.post(f"/api/v1/interviews/{rahul_session_id}/respond", json={"answer_text": "Fever & Chills", "input_mode": "touch"})
+    assert rahul_ans_res.status_code == 200
+    assert rahul_ans_res.json()["chief_complaint"] == "Fever"
+
+    # Fetch Rahul clinical detail
+    rahul_get = client.get(f"/api/v1/patients/{rahul_id}").json()
+    assert rahul_get["name"] == "Rahul Demo"
+    assert "fever" in rahul_get["chief_complaint"].lower()
+    assert "fever" in rahul_get["ai_clinical_summary"].lower()
+    # Rahul must NOT have Zainab's headache or Ramesh's cough
+    assert "headache" not in rahul_get["chief_complaint"].lower(), "Rahul must NOT have Zainab's headache"
+    assert "cough" not in rahul_get["chief_complaint"].lower(), "Rahul must NOT have Ramesh's cough"
+    assert "headache" not in rahul_get["ai_clinical_summary"].lower()
+    assert "cough" not in rahul_get["ai_clinical_summary"].lower()
+
+    # Re-fetch Zainab to guarantee Rahul's data did not bleed into Zainab
+    zainab_refetch = client.get(f"/api/v1/patients/{patient_id}").json()
+    assert zainab_refetch["name"] == "Zainab Demo"
+    assert "headache" in zainab_refetch["chief_complaint"].lower()
+    assert "fever" not in zainab_refetch["chief_complaint"].lower(), "Zainab must NOT have Rahul's fever"
+    assert "fever" not in zainab_refetch["ai_clinical_summary"].lower(), "Zainab summary must NOT have Rahul's fever"
+
+    print("Mutual non-leakage confirmed: Rahul Demo and Zainab Demo clinical data are 100% isolated!")
+
     print("\n========================================================")
-    print("ALL 9 STEPS PASSED SUCCESSFULLY: SINGLE SOURCE OF TRUTH VERIFIED")
+    print("ALL 10 STEPS PASSED SUCCESSFULLY: SINGLE SOURCE OF TRUTH VERIFIED")
     print("========================================================")
 
 

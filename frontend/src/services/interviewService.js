@@ -6,21 +6,36 @@
  * client-side fallback state machine implementing the SOCRATES decision tree.
  */
 
-import { QUESTION_ONTOLOGY, getInitialExtractedHistory } from '../data/adaptiveQuestionOntology';
+import { QUESTION_ONTOLOGY, getInitialExtractedHistory, classifySymptomIntent } from '../data/adaptiveQuestionOntology.js';
+import { patientService } from './patientService.js';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api/v1/interviews';
+const API_BASE_URL = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL)
+  ? `${import.meta.env.VITE_API_BASE_URL}/interviews`
+  : 'http://127.0.0.1:8000/api/v1/interviews';
 
 // In-memory client fallback session
 let clientFallbackSession = null;
 
-function initClientFallback(patientId = 'CF-PAT-01', language = 'hi') {
+function initClientFallback(patientId = null, language = 'hi', chiefComplaint = null) {
+  const targetPatientId = patientId || patientService.getCurrentPatientId() || 'CF-2026-005';
+
+  let cleanedCC = chiefComplaint && String(chiefComplaint).trim() ? String(chiefComplaint).trim() : null;
+
+  let initialQId = 'root_complaint';
+  if (cleanedCC) {
+    initialQId = classifySymptomIntent(cleanedCC);
+    if (initialQId === 'root_complaint') {
+      initialQId = 'generic_onset';
+    }
+  }
+
   clientFallbackSession = {
     session_id: 'client-' + Math.random().toString(36).substring(2, 9),
-    patient_id: patientId,
+    patient_id: targetPatientId,
     language: language,
-    chief_complaint: null,
-    current_question_id: 'root_complaint',
-    question_stack: ['root_complaint'],
+    chief_complaint: cleanedCC || null,
+    current_question_id: initialQId,
+    question_stack: [initialQId],
     history: [],
     extracted_history: getInitialExtractedHistory(),
     red_flags: [],
@@ -58,11 +73,12 @@ function clientSubmitAnswer(answerText, inputMode = 'touch') {
   // Extract clinical field
   if (qNode.id === 'root_complaint') {
     const match = (qNode.quick_options || []).find(
-      opt => opt.value.toLowerCase() === answerText.toLowerCase() ||
-             opt.label.toLowerCase() === answerText.toLowerCase() ||
-             answerText.toLowerCase().includes(opt.value.toLowerCase())
+      (opt) =>
+        opt.value.toLowerCase() === answerText.toLowerCase() ||
+        opt.label.toLowerCase() === answerText.toLowerCase() ||
+        (opt.complaint && answerText.toLowerCase() === opt.complaint.toLowerCase())
     );
-    session.chief_complaint = match ? match.complaint : answerText;
+    session.chief_complaint = match ? match.complaint : answerText.trim();
   }
 
   if (qNode.field_key) {
@@ -73,12 +89,22 @@ function clientSubmitAnswer(answerText, inputMode = 'touch') {
   const lowerAnswer = answerText.toLowerCase();
   if (
     lowerAnswer.includes('blood') ||
+    lowerAnswer.includes('bleed') ||
     lowerAnswer.includes('black stool') ||
     lowerAnswer.includes('melena') ||
     lowerAnswer.includes('खून') ||
     lowerAnswer.includes('hematemesis')
   ) {
-    const flag = 'Potential gastrointestinal bleeding symptom reported';
+    const flag = 'Potential bleeding / hemorrhage symptom reported';
+    if (!session.red_flags.includes(flag)) {
+      session.red_flags.push(flag);
+    }
+  }
+  if (
+    (lowerAnswer.includes('dizziness') || lowerAnswer.includes('faint') || lowerAnswer.includes('presyncope') || lowerAnswer.includes('चक्कर')) &&
+    (session.chief_complaint || '').toLowerCase().includes('bleed')
+  ) {
+    const flag = 'Dizziness or presyncope associated with bleeding (Risk of hemodynamic instability)';
     if (!session.red_flags.includes(flag)) {
       session.red_flags.push(flag);
     }
@@ -113,7 +139,7 @@ function clientSubmitAnswer(answerText, inputMode = 'touch') {
 
   if (!nextQId) {
     if (qNode.id === 'root_complaint') {
-      nextQId = qNode.default_next || 'abdo_site';
+      nextQId = classifySymptomIntent(answerText);
     } else {
       nextQId = qNode.next_question;
     }
@@ -126,6 +152,14 @@ function clientSubmitAnswer(answerText, inputMode = 'touch') {
     session.current_question_id = nextQId;
     session.question_stack.push(nextQId);
   }
+
+  // Synchronize extracted clinical information to patient record
+  patientService.syncInterviewData(session.patient_id, {
+    chiefComplaint: session.chief_complaint,
+    extractedHistory: session.extracted_history,
+    redFlags: session.red_flags,
+    sessionCompleted: session.completed
+  });
 
   return formatClientState();
 }
@@ -147,19 +181,32 @@ function clientStepBack() {
     }
   }
 
+  // Synchronize step-back to patient record
+  patientService.syncInterviewData(session.patient_id, {
+    chiefComplaint: session.chief_complaint,
+    extractedHistory: session.extracted_history,
+    redFlags: session.red_flags,
+    sessionCompleted: false
+  });
+
   return formatClientState();
 }
 
 export const interviewService = {
   /**
-   * Start a new adaptive interview session
+   * Start a new adaptive interview session bound to patientId
    */
-  async startSession(patientId = 'CF-PAT-01', language = 'hi') {
+  async startSession(patientId = null, language = 'hi', chiefComplaint = null) {
+    const targetPatientId = patientId || patientService.getCurrentPatientId() || 'CF-2026-005';
     try {
       const response = await fetch(`${API_BASE_URL}/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ patient_id: patientId, language })
+        body: JSON.stringify({
+          patient_id: targetPatientId,
+          language,
+          chief_complaint: chiefComplaint || undefined
+        })
       });
       if (response.ok) {
         return await response.json();
@@ -167,7 +214,7 @@ export const interviewService = {
     } catch (err) {
       console.warn('Backend interview API unavailable, using client fallback engine:', err.message);
     }
-    return initClientFallback(patientId, language);
+    return initClientFallback(targetPatientId, language, chiefComplaint);
   },
 
   /**
@@ -182,7 +229,17 @@ export const interviewService = {
           body: JSON.stringify({ answer_text: answerText, input_mode: inputMode })
         });
         if (response.ok) {
-          return await response.json();
+          const res = await response.json();
+          // Sync to patient record on client
+          if (res.patient_id) {
+            patientService.syncInterviewData(res.patient_id, {
+              chiefComplaint: res.chief_complaint,
+              extractedHistory: res.extracted_history,
+              redFlags: res.red_flags,
+              sessionCompleted: res.completed
+            });
+          }
+          return res;
         }
       } catch (err) {
         console.warn('Backend interview respond error, continuing with fallback:', err.message);
@@ -222,7 +279,16 @@ export const interviewService = {
           headers: { 'Content-Type': 'application/json' }
         });
         if (response.ok) {
-          return await response.json();
+          const res = await response.json();
+          if (res.patient_id) {
+            patientService.syncInterviewData(res.patient_id, {
+              chiefComplaint: res.chief_complaint,
+              extractedHistory: res.extracted_history,
+              redFlags: res.red_flags,
+              sessionCompleted: true
+            });
+          }
+          return res;
         }
       } catch (err) {
         console.warn('Backend interview complete error:', err.message);
@@ -230,6 +296,12 @@ export const interviewService = {
     }
     if (clientFallbackSession) {
       clientFallbackSession.completed = true;
+      patientService.syncInterviewData(clientFallbackSession.patient_id, {
+        chiefComplaint: clientFallbackSession.chief_complaint,
+        extractedHistory: clientFallbackSession.extracted_history,
+        redFlags: clientFallbackSession.red_flags,
+        sessionCompleted: true
+      });
       return formatClientState();
     }
     return null;

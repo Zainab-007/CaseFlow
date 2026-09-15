@@ -278,6 +278,118 @@ QUESTION_TREE: Dict[str, Dict[str, Any]] = {
             {"label": "⚠️ Sudden severe 'worst headache of life'", "hindi": "अचानक बहुत तेज़ भयानक सिरदर्द", "value": "Thunderclap headache (Red Flag)"}
         ],
         "next_question": "abdo_severity"
+    },
+
+    # ==========================================
+    # BLEEDING SYMPTOM BRANCH
+    # ==========================================
+    "bleeding_onset": {
+        "id": "bleeding_onset",
+        "question": "When did you first notice the bleeding, and is it continuous or intermittent?",
+        "hindi_question": "रक्तस्राव (खून आना) कब शुरू हुआ, और क्या यह लगातार हो रहा है?",
+        "audio_hint": "Tell us how long you have observed this bleeding.",
+        "input_type": "choice",
+        "field_key": "onset",
+        "quick_options": [
+            {"label": "Started suddenly today (< 24 hours)", "hindi": "आज अचानक शुरू हुआ", "value": "Acute onset today (<24h)"},
+            {"label": "Ongoing for 2 to 3 days", "hindi": "2-3 दिन से हो रहा है", "value": "2-3 days"},
+            {"label": "Comes and goes intermittently", "hindi": "रुक-रुक कर कभी-कभी होता है", "value": "Intermittent episodes"},
+            {"label": "Chronic / Happening for weeks", "hindi": "हफ्तों से बार-बार हो रहा है", "value": "Chronic (>2 weeks)"}
+        ],
+        "next_question": "bleeding_severity"
+    },
+    "bleeding_severity": {
+        "id": "bleeding_severity",
+        "question": "How would you describe the amount or intensity of bleeding?",
+        "hindi_question": "रक्तस्राव की मात्रा या स्थिति कैसी है?",
+        "audio_hint": "Select whether it is spotting, moderate, or heavy bleeding.",
+        "input_type": "choice",
+        "field_key": "severity",
+        "quick_options": [
+            {"label": "Mild spotting or light staining", "hindi": "हल्के धब्बे या बहुत कम मात्रा", "value": "Mild spotting"},
+            {"label": "Moderate steady bleeding", "hindi": "मध्यम प्रवाह", "value": "Moderate bleeding"},
+            {"label": "⚠️ Heavy / Continuous bleeding or passing clots", "hindi": "भारी या लगातार रक्तस्राव / थक्के आना", "value": "Heavy active bleeding (Red Flag)"}
+        ],
+        "next_question": "bleeding_associated"
+    },
+    "bleeding_associated": {
+        "id": "bleeding_associated",
+        "question": "Are you experiencing any of these accompanying symptoms?",
+        "hindi_question": "क्या आपको साथ में इनमें से कोई अन्य लक्षण भी हैं?",
+        "audio_hint": "Select any other symptoms such as severe pain, dizziness, or fever.",
+        "input_type": "choice",
+        "field_key": "associatedSymptoms",
+        "quick_options": [
+            {"label": "Severe pain or abdominal/pelvic cramping", "hindi": "तेज़ दर्द या मरोड़", "value": "Severe pain / cramping"},
+            {"label": "⚠️ Dizziness, lightheadedness, or feeling faint", "hindi": "चक्कर आना या बेहोशी जैसा लगना", "value": "Dizziness / Presyncope (Red Flag)"},
+            {"label": "Fever, chills, or foul odor", "hindi": "बुखार, कंपकंपी या दुर्गंध", "value": "Fever or chills"},
+            {"label": "None of the above", "hindi": "इनमें से कोई नहीं", "value": "No associated symptoms"}
+        ],
+        "next_question": "abdo_medications"
+    },
+
+    # ==========================================
+    # GENERIC CLARIFICATION BRANCH (Safe Fallback)
+    # ==========================================
+    "generic_onset": {
+        "id": "generic_onset",
+        "question": "When did your symptoms first begin?",
+        "hindi_question": "आपकी यह परेशानी सबसे पहले कब शुरू हुई थी?",
+        "audio_hint": "Select how long you have experienced this issue.",
+        "input_type": "choice",
+        "field_key": "onset",
+        "quick_options": [
+            {"label": "Today / Suddenly in the last 24 hours", "hindi": "आज अचानक (24 घंटे के अंदर)", "value": "Acute (<24 hours)"},
+            {"label": "A few days ago (2 - 5 days)", "hindi": "कुछ दिन पहले (2-5 दिन)", "value": "2-5 days ago"},
+            {"label": "About 1 to 2 weeks ago", "hindi": "लगभग 1-2 हफ्ते पहले", "value": "1-2 weeks ago"},
+            {"label": "Ongoing for more than a month", "hindi": "एक महीने से अधिक समय से", "value": "Chronic (>1 month)"}
+        ],
+        "next_question": "generic_character"
+    },
+    "generic_character": {
+        "id": "generic_character",
+        "question": "How would you describe the nature of this discomfort?",
+        "hindi_question": "इस परेशानी का स्वरूप कैसा है?",
+        "audio_hint": "Choose the description that closest matches your feeling.",
+        "input_type": "choice",
+        "field_key": "character",
+        "quick_options": [
+            {"label": "Continuous and persistent", "hindi": "लगातार बना रहता है", "value": "Continuous persistent"},
+            {"label": "Comes and goes intermittently", "hindi": "रुक-रुक कर कभी-कभी होता है", "value": "Intermittent / episodic"},
+            {"label": "Progressively worsening over time", "hindi": "समय के साथ लगातार बढ़ रहा है", "value": "Progressively worsening"},
+            {"label": "Mild discomfort without sharp pain", "hindi": "हल्की बेचैनी", "value": "Mild discomfort"}
+        ],
+        "next_question": "generic_severity"
+    },
+    "generic_severity": {
+        "id": "generic_severity",
+        "question": "How significantly is this affecting your daily routine?",
+        "hindi_question": "इस तकलीफ़ का आपकी दिनचर्या पर कितना असर पड़ रहा है?",
+        "audio_hint": "Select the severity impact on your routine.",
+        "input_type": "choice",
+        "field_key": "severity",
+        "quick_options": [
+            {"label": "Mild — Can carry out all daily activities", "hindi": "हल्का (दैनिक कार्य सामान्य रूप से संभव)", "value": "Mild (3/10)"},
+            {"label": "Moderate — Interferes with work or sleep", "hindi": "मध्यम (काम या नींद में रुकावट)", "value": "Moderate (6/10)"},
+            {"label": "Severe — Unable to perform normal tasks", "hindi": "गंभीर (सामान्य कामकाज में असमर्थ)", "value": "Severe (8/10)"},
+            {"label": "⚠️ Extreme / Acute emergency", "hindi": "अति गंभीर / आपातकालीन स्तर", "value": "Extreme (10/10)"}
+        ],
+        "next_question": "generic_associated"
+    },
+    "generic_associated": {
+        "id": "generic_associated",
+        "question": "Do you have any accompanying high-priority symptoms?",
+        "hindi_question": "क्या आपको साथ में इनमें से कोई अन्य आपात लक्षण हैं?",
+        "audio_hint": "Select any accompanying red-flag symptoms.",
+        "input_type": "choice",
+        "field_key": "associatedSymptoms",
+        "quick_options": [
+            {"label": "⚠️ Difficulty breathing or chest heaviness", "hindi": "सांस लेने में तकलीफ़ या सीने में भारीपन", "value": "Dyspnea / Chest heaviness (Red Flag)"},
+            {"label": "⚠️ Altered sensorium, severe weakness, or fainting", "hindi": "अत्यधिक कमजोरी, चक्कर या बेहोशी", "value": "Altered sensorium / Presyncope (Red Flag)"},
+            {"label": "Fever, vomiting, or diarrhea", "hindi": "बुखार, उल्टी या दस्त", "value": "Fever / Vomiting"},
+            {"label": "None of the above", "hindi": "इनमें से कोई नहीं", "value": "No associated symptoms"}
+        ],
+        "next_question": "abdo_medications"
     }
 }
 
@@ -291,16 +403,69 @@ class AdaptiveInterviewEngine:
     def __init__(self):
         self._sessions: Dict[str, Dict[str, Any]] = {}
 
-    def start_session(self, patient_id: str, language: str = "hi") -> Dict[str, Any]:
+    def classify_symptom_intent(self, text: Optional[str]) -> str:
+        """
+        Broad intent mapping: classifies free-text chief complaints into clinical question pathways.
+        Does NOT diagnose diseases. Falls back safely to generic clarification.
+        """
+        if not text or not str(text).strip():
+            return "root_complaint"
+        t = str(text).lower()
+        # 1. Bleeding / Hemorrhage symptoms
+        if any(k in t for k in ["bleed", "blood", "khoon", "hemorrhage", "spotting", "hematuria", "intimate", "discharge", "cut", "wound"]):
+            return "bleeding_onset"
+        # 2. Chest discomfort / Cardiac
+        if any(k in t for k in ["chest", "seena", "heart", "angina", "retrosternal", "palpitation", "crushing"]):
+            return "chest_character"
+        # 3. Respiratory / Cough
+        if any(k in t for k in ["cough", "khansi", "sputum", "balgam", "phlegm", "wheez", "saans", "breathless"]):
+            return "cough_type"
+        # 4. Fever / Systemic chills
+        if any(k in t for k in ["fever", "bukhar", "chill", "shiver", "thand", "temperature", "tap"]):
+            return "fever_pattern"
+        # 5. Headache / Neurological
+        if any(k in t for k in ["headache", "sir dard", "sar dard", "migrain", "head pain", "sir me dard", "sar me dard"]):
+            return "headache_type"
+        # 6. Abdominal / GI pain symptoms (SOCRATES)
+        if any(k in t for k in ["stomach", "abdominal", "abdomen", "pet", "dard", "belly", "cramp", "gastric", "acid", "burning", "colic", "pain"]):
+            return "abdo_site"
+        # 7. Safe generic clarification pathway for all other unknown complaints
+        return "generic_onset"
+
+    def start_session(self, patient_id: str, language: str = "hi", chief_complaint: Optional[str] = None) -> Dict[str, Any]:
         session_id = str(uuid.uuid4())[:8]
+
+        cleaned_cc = str(chief_complaint).strip() if chief_complaint and str(chief_complaint).strip() else None
+
+        # If not provided in request, attempt lookup from patient_service
+        if not cleaned_cc:
+            try:
+                from app.services.base_patient_service import patient_service
+                pat = patient_service._patients.get(patient_id)
+                if pat and pat.get("chief_complaint"):
+                    cand = str(pat["chief_complaint"]).strip()
+                    if cand and cand.lower() not in ["routine medical intake", "routine intake", "general consultation"]:
+                        cleaned_cc = cand
+            except Exception:
+                pass
+
+        if cleaned_cc:
+            initial_qid = self.classify_symptom_intent(cleaned_cc)
+            if initial_qid == "root_complaint":
+                initial_qid = "generic_onset"
+            session_cc = cleaned_cc
+        else:
+            initial_qid = "root_complaint"
+            session_cc = None
+
         session = {
             "session_id": session_id,
             "patient_id": patient_id,
             "language": language,
-            "current_question_id": "root_complaint",
+            "current_question_id": initial_qid,
             "history": [],  # list of {question, answer, question_id, extracted}
-            "question_stack": ["root_complaint"],
-            "chief_complaint": None,
+            "question_stack": [initial_qid],
+            "chief_complaint": session_cc,
             "extracted_history": {
                 "site": "Not yet provided",
                 "onset": "Not yet provided",
@@ -413,6 +578,22 @@ class AdaptiveInterviewEngine:
         if not session:
             raise KeyError("Interview session not found")
         session["completed"] = True
+
+        # Synchronize completion with patient_service
+        try:
+            from app.services.base_patient_service import patient_service
+            patient_id = session.get("patient_id")
+            if patient_id:
+                patient_service.sync_interview_data(
+                    patient_id=patient_id,
+                    chief_complaint=session.get("chief_complaint"),
+                    extracted_history=session.get("extracted_history", {}),
+                    red_flags=session.get("red_flags", []),
+                    session_completed=True
+                )
+        except Exception:
+            pass
+
         return self._format_session_state(session)
 
     def _determine_next_question(self, q_node: Dict[str, Any], answer_text: str) -> Optional[str]:
@@ -425,18 +606,7 @@ class AdaptiveInterviewEngine:
 
         # Root question mapping
         if q_node["id"] == "root_complaint":
-            text_lower = answer_text.lower()
-            if any(k in text_lower for k in ["stomach", "abdominal", "pet", "dard", "belly", "pain"]):
-                return "abdo_site"
-            elif "fever" in text_lower or "bukhar" in text_lower:
-                return "fever_pattern"
-            elif "chest" in text_lower or "seena" in text_lower:
-                return "chest_character"
-            elif "cough" in text_lower or "khansi" in text_lower:
-                return "cough_type"
-            elif "headache" in text_lower or "sir" in text_lower:
-                return "headache_type"
-            return "abdo_site"
+            return self.classify_symptom_intent(answer_text)
 
         # Standard next question
         return q_node.get("next_question")
@@ -447,17 +617,17 @@ class AdaptiveInterviewEngine:
         # If answering root question -> set Chief Complaint
         if q_node["id"] == "root_complaint":
             # Match quick options or free text
+            matched = None
             for opt in q_node.get("quick_options", []):
                 if (
-                    opt["value"].lower() in answer.lower()
-                    or opt["label"].lower() in answer.lower()
-                    or opt.get("complaint", "").lower() in answer.lower()
+                    opt["value"].lower() == answer.lower()
+                    or opt["label"].lower() == answer.lower()
+                    or opt.get("complaint", "").lower() == answer.lower()
                     or answer.lower() in opt.get("complaint", "").lower()
                 ):
-                    session["chief_complaint"] = opt.get("complaint") or opt["value"]
+                    matched = opt.get("complaint") or opt["value"]
                     break
-            if not session["chief_complaint"]:
-                session["chief_complaint"] = answer.strip()
+            session["chief_complaint"] = matched if matched else answer.strip()
 
         # Map field key if defined on question node
         field_key = q_node.get("field_key")
@@ -466,10 +636,16 @@ class AdaptiveInterviewEngine:
 
         # Safety / Red-Flag Checks (OR Logic)
         answer_lower = answer.lower()
-        if any(flag in answer_lower for flag in ["blood", "black stool", "melena", "hematemesis", "खून"]):
-            flag_note = "Potential gastrointestinal bleeding symptom reported"
+        if any(flag in answer_lower for flag in ["blood", "black stool", "melena", "hematemesis", "खून", "bleed", "bleeding"]):
+            flag_note = "Potential bleeding / hemorrhage symptom reported"
             if flag_note not in session["red_flags"]:
                 session["red_flags"].append(flag_note)
+
+        if any(term in answer_lower for term in ["dizziness", "faint", "presyncope", "lightheaded", "चक्कर"]):
+            if any(b in (session.get("chief_complaint") or "").lower() for b in ["bleed", "blood", "खून"]):
+                flag_note = "Dizziness or presyncope associated with bleeding (Risk of hemodynamic instability)"
+                if flag_note not in session["red_flags"]:
+                    session["red_flags"].append(flag_note)
 
         if "extreme (10/10)" in answer_lower or "thunderclap" in answer_lower:
             flag_note = "Acute high-severity onset reported (10/10)"

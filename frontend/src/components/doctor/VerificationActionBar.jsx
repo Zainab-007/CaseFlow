@@ -8,6 +8,7 @@ import { Check, Edit3, XCircle, Share2, ShieldCheck, CheckCircle2 } from 'lucide
  * Enforces the core product principle: doctor retains final authority over the clinical record.
  */
 export default function VerificationActionBar({
+  patient,
   patientId,
   currentStatus = 'Pending Review',
   onStatusChange,
@@ -187,17 +188,45 @@ export default function VerificationActionBar({
             <span>FHIR R4 DiagnosticReport & Encounter payload dispatched successfully to ABHA Gateway.</span>
           </div>
           <div className="bg-slate-900 text-slate-200 p-3 rounded-xl text-xs font-mono overflow-x-auto max-h-48">
-            <pre>{`{
-  "resourceType": "Bundle",
-  "type": "document",
-  "timestamp": "2026-09-14T10:15:00Z",
-  "identifier": { "system": "https://abdm.gov.in/fhir", "value": "CF-OPD-104" },
-  "entry": [
-    { "resource": { "resourceType": "Patient", "id": "CF-2026-001", "name": "Ramesh Chandra Sharma" } },
-    { "resource": { "resourceType": "Condition", "code": "Cough with dyspnea", "clinicalStatus": "active" } },
-    { "resource": { "resourceType": "Verification", "status": "doctor-verified", "practitioner": "Dr. S. K. Mehta" } }
-  ]
-}`}</pre>
+            <pre>{JSON.stringify(
+              {
+                resourceType: 'Bundle',
+                type: 'document',
+                timestamp: new Date().toISOString(),
+                identifier: {
+                  system: 'https://abdm.gov.in/fhir',
+                  value: patient?.queue_token || 'CF-OPD-104'
+                },
+                entry: [
+                  {
+                    resource: {
+                      resourceType: 'Patient',
+                      id: patient?.id || patientId || 'CF-PATIENT',
+                      name: patient?.name || patient?.demographics?.name || 'Patient'
+                    }
+                  },
+                  {
+                    resource: {
+                      resourceType: 'Condition',
+                      code:
+                        typeof patient?.chief_complaint === 'object'
+                          ? patient?.chief_complaint?.title
+                          : patient?.chief_complaint || 'General consultation',
+                      clinicalStatus: 'active'
+                    }
+                  },
+                  {
+                    resource: {
+                      resourceType: 'Verification',
+                      status: 'doctor-verified',
+                      practitioner: 'Dr. S. K. Mehta'
+                    }
+                  }
+                ]
+              },
+              null,
+              2
+            )}</pre>
           </div>
         </div>
       </Modal>

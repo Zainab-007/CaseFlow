@@ -37,6 +37,7 @@ class HistoryTurn(BaseModel):
 class StartSessionRequest(BaseModel):
     patient_id: str = "CF-PAT-01"
     language: str = "hi"
+    chief_complaint: Optional[str] = None
 
 
 class SubmitAnswerRequest(BaseModel):

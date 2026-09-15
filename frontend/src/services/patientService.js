@@ -6,7 +6,7 @@
  * patient-isolation and client-side fallback state machine.
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
+const API_BASE_URL = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL)
   ? `${import.meta.env.VITE_API_BASE_URL}/patients`
   : 'http://127.0.0.1:8000/api/v1/patients';
 
@@ -185,7 +185,7 @@ let clientFallbackPatients = {
     red_flag_note: null,
     language: 'English',
     arrived_at: '10:35 AM',
-    verification_status: 'Pending Review',
+    verification_status: 'Verified',
     demographics: {
       name: 'Ananya Mukherjee',
       age: 29,
@@ -319,10 +319,22 @@ let clientFallbackPatients = {
   }
 };
 
+const DEMO_PATIENT_IDS = ['CF-2026-001', 'CF-2026-002', 'CF-2026-003', 'CF-2026-004'];
+
 export const patientService = {
+  isDemoPatient(id) {
+    return DEMO_PATIENT_IDS.includes(id);
+  },
+
   getCurrentPatientId() {
     if (typeof window !== 'undefined') {
-      return sessionStorage.getItem(CURRENT_PATIENT_KEY) || null;
+      const stored = sessionStorage.getItem(CURRENT_PATIENT_KEY);
+      // If stored ID is a demo patient, clear it so kiosk intake stays isolated
+      if (stored && this.isDemoPatient(stored)) {
+        sessionStorage.removeItem(CURRENT_PATIENT_KEY);
+        return null;
+      }
+      return stored || null;
     }
     return null;
   },
@@ -341,6 +353,21 @@ export const patientService = {
     if (typeof window !== 'undefined') {
       sessionStorage.removeItem(CURRENT_PATIENT_KEY);
     }
+  },
+
+  /**
+   * Canonical queue statistics calculator
+   * Guarantees 100% agreement between header counters, metric cards, and patient table.
+   */
+  computeQueueStats(queue = []) {
+    const list = Array.isArray(queue) ? queue : [];
+    return {
+      total: list.length,
+      redFlags: list.filter((p) => Boolean(p.red_flag_detected)).length,
+      urgent: list.filter((p) => (p.triage_priority || '').toUpperCase() === 'URGENT').length,
+      verified: list.filter((p) => (p.verification_status || '').toLowerCase() === 'verified').length,
+      pending: list.filter((p) => (p.verification_status || '').toLowerCase() !== 'verified').length
+    };
   },
 
   /**
@@ -378,6 +405,7 @@ export const patientService = {
 
   /**
    * Retrieve detailed patient clinical record by ID
+   * Strictly isolates patient data: never silently falls back to CF-2026-001.
    */
   async getPatient(id) {
     const targetId = id || this.getCurrentPatientId();
@@ -392,6 +420,7 @@ export const patientService = {
       console.warn(`Backend patient fetch for ${targetId} failed, using client fallback:`, err.message);
     }
 
+    // Return the matching record or null. NEVER return another patient's data!
     return clientFallbackPatients[targetId] || null;
   },
 
@@ -401,6 +430,12 @@ export const patientService = {
   async updatePatient(id, updateData) {
     const targetId = id || this.getCurrentPatientId();
     if (!targetId) return null;
+
+    // Safety guard: Demo patients are immutable from kiosk registration
+    if (this.isDemoPatient(targetId)) {
+      console.warn(`Prevented overwriting seeded demo patient ${targetId}. Creating isolated patient instead.`);
+      return this.registerPatient(updateData);
+    }
 
     try {
       const res = await fetch(`${API_BASE_URL}/${targetId}`, {
@@ -441,7 +476,10 @@ export const patientService = {
       if (updateData.chief_complaint) {
         p.chief_complaint = updateData.chief_complaint;
         if (p.structured_history?.hpi) p.structured_history.hpi.character = updateData.chief_complaint;
-        p.ai_clinical_summary = `${p.age}-year-old ${String(p.gender).toLowerCase()} presenting with ${updateData.chief_complaint.toLowerCase()}. No acute emergency red-flags identified during pre-consultation intake.`;
+        p.ai_clinical_summary = this.generateClientClinicalSummary(p);
+      }
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('caseflow-queue-updated'));
       }
       return p;
     }
@@ -449,7 +487,7 @@ export const patientService = {
   },
 
   /**
-   * Register a new patient at the kiosk
+   * Register a new patient at the kiosk with guaranteed unique patient_id
    */
   async registerPatient(patientData) {
     try {
@@ -461,14 +499,26 @@ export const patientService = {
       if (res.ok) {
         const created = await res.json();
         this.setCurrentPatientId(created.id);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('caseflow-queue-updated'));
+        }
         return created;
       }
     } catch (err) {
       console.warn('Backend patient register failed, using client fallback:', err.message);
     }
 
-    const count = Object.keys(clientFallbackPatients).length + 1;
-    const newId = `CF-2026-${String(count).padStart(3, '0')}`;
+    // Determine next unique ID avoiding demo IDs (CF-2026-001 through CF-2026-004)
+    let maxNum = 4;
+    Object.keys(clientFallbackPatients).forEach((k) => {
+      const match = k.match(/CF-2026-(\d+)/);
+      if (match) {
+        const n = parseInt(match[1], 10);
+        if (n > maxNum) maxNum = n;
+      }
+    });
+
+    const newId = `CF-2026-${String(maxNum + 1).padStart(3, '0')}`;
     const newRecord = {
       id: newId,
       queue_token: `OPD-${104 + Object.keys(clientFallbackPatients).length}`,
@@ -484,7 +534,7 @@ export const patientService = {
       red_flag_detected: false,
       red_flag_note: null,
       language: patientData.preferred_language || 'Hindi',
-      arrived_at: '10:55 AM',
+      arrived_at: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       verification_status: 'Pending Review',
       demographics: {
         name: patientData.name || 'New Patient',
@@ -493,7 +543,7 @@ export const patientService = {
         abha_id: patientData.abha_id || 'Not linked',
         contact: patientData.phone || '+91 99000 00000',
         blood_group: 'Unknown',
-        arrived_at: '10:55 AM',
+        arrived_at: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         consultation_type: 'New Kiosk Intake',
         ayush_mode: 'Allopathic Standard (AYUSH Inactive)'
       },
@@ -502,20 +552,182 @@ export const patientService = {
         vitals_summary: 'Vitals pending triage station check',
         triage_nurse: 'Station 1'
       },
-      ai_clinical_summary: `Patient ${patientData.name} registered via kiosk.`,
-      red_flag: { detected: false, title: 'No Red Flags Detected' },
+      ai_clinical_summary: `${Number(patientData.age) || 30}-year-old ${String(patientData.gender || 'patient').toLowerCase()} presenting with ${(patientData.chief_complaint || 'routine intake').toLowerCase()}. No acute emergency red-flags identified during pre-consultation intake.`,
+      red_flag: {
+        detected: false,
+        title: 'No emergency triage red-flags currently identified.',
+        rule_trigger: 'Initial intake screen',
+        nlp_trigger: 'None',
+        physician_action: 'Standard clinical consultation'
+      },
       structured_history: {
-        hpi: { onset: 'Recent', character: 'New intake', severity: 'Mild' },
+        hpi: {
+          onset: 'Recent',
+          character: patientData.chief_complaint || 'New intake',
+          severity: 'Mild (3/10)'
+        },
         past_medical_history: [],
         current_medications: [],
-        allergies: []
+        allergies: [],
+        family_history: [],
+        personal_social: {},
+        review_of_systems: {}
       },
-      timeline: []
+      timeline: [
+        {
+          date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          title: 'CaseFlow Kiosk Registration',
+          category: 'Intake',
+          description: `Patient registered at kiosk. Reason: ${patientData.chief_complaint || 'Routine intake'}`,
+          source: 'patient-reported'
+        }
+      ],
+      documents: []
     };
 
     clientFallbackPatients[newId] = newRecord;
     this.setCurrentPatientId(newId);
     return newRecord;
+  },
+
+  /**
+   * Synchronize patient interview responses and clinical extractions to the patient record
+   */
+  async syncInterviewData(patientId, { chiefComplaint, extractedHistory = {}, redFlags = [], sessionCompleted = false }) {
+    if (!patientId) return null;
+
+    // 1. Synchronize to backend if accessible
+    try {
+      const updatePayload = {};
+      if (chiefComplaint) updatePayload.chief_complaint = chiefComplaint;
+      if (sessionCompleted) updatePayload.intake_status = 'Completed';
+
+      await fetch(`${API_BASE_URL}/${patientId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatePayload)
+      });
+    } catch (err) {
+      // client fallback continues seamlessly
+    }
+
+    // 2. Synchronize to client fallback store
+    let p = clientFallbackPatients[patientId];
+    if (!p) {
+      p = {
+        id: patientId,
+        queue_token: `OPD-${104 + Object.keys(clientFallbackPatients).length}`,
+        name: 'Patient',
+        age: 30,
+        gender: 'Other',
+        department: 'General Medicine',
+        triage_priority: 'Routine',
+        chief_complaint: chiefComplaint || 'General consultation',
+        intake_status: sessionCompleted ? 'Completed' : 'Interview in progress',
+        red_flag_detected: false,
+        red_flag_note: null,
+        language: 'Hindi',
+        arrived_at: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        verification_status: 'Pending Review',
+        demographics: {
+          name: 'Patient',
+          age: 30,
+          gender: 'Other'
+        },
+        triage: { priority: 'Routine', vitals_summary: 'Pending triage' },
+        structured_history: { hpi: {}, past_medical_history: [], current_medications: [], allergies: [] },
+        timeline: [],
+        documents: []
+      };
+      clientFallbackPatients[patientId] = p;
+    }
+
+    // Update chief complaint
+    if (chiefComplaint && chiefComplaint !== 'Not yet provided') {
+      p.chief_complaint = chiefComplaint;
+      if (p.demographics) p.demographics.chief_complaint = chiefComplaint;
+      if (p.structured_history?.hpi) p.structured_history.hpi.character = chiefComplaint;
+    }
+
+    // Update HPI from extractedHistory
+    if (!p.structured_history) p.structured_history = {};
+    if (!p.structured_history.hpi) p.structured_history.hpi = {};
+    const hpi = p.structured_history.hpi;
+    if (extractedHistory.onset && extractedHistory.onset !== 'Not yet provided') hpi.onset = extractedHistory.onset;
+    if (extractedHistory.character && extractedHistory.character !== 'Not yet provided') hpi.character = extractedHistory.character;
+    if (extractedHistory.severity && extractedHistory.severity !== 'Not yet provided') hpi.severity = extractedHistory.severity;
+    if (extractedHistory.site && extractedHistory.site !== 'Not yet provided') hpi.site = extractedHistory.site;
+    if (extractedHistory.aggravatingFactors && extractedHistory.aggravatingFactors !== 'Not yet provided') hpi.aggravating_factors = extractedHistory.aggravatingFactors;
+    if (extractedHistory.relievingFactors && extractedHistory.relievingFactors !== 'Not yet provided') hpi.relieving_factors = extractedHistory.relievingFactors;
+
+    // Update Red Flags
+    if (redFlags && redFlags.length > 0) {
+      p.red_flag_detected = true;
+      p.red_flag_note = redFlags.join('; ');
+      p.red_flag = {
+        detected: true,
+        title: `Symptom Red Flag: ${redFlags[0]}`,
+        rule_trigger: 'Patient Interview Safety Screen',
+        nlp_trigger: redFlags.join('; '),
+        physician_action: 'Urgent physician evaluation indicated'
+      };
+      p.triage_priority = 'Urgent';
+    } else if (!p.red_flag_detected) {
+      p.red_flag_detected = false;
+      p.red_flag_note = null;
+      p.red_flag = {
+        detected: false,
+        title: 'No emergency triage red-flags currently identified.'
+      };
+    }
+
+    // Dynamic AI summary generation based strictly on THIS patient's findings
+    p.ai_clinical_summary = this.generateClientClinicalSummary(p, extractedHistory, redFlags);
+
+    if (sessionCompleted) {
+      p.intake_status = 'Completed';
+    }
+
+    return p;
+  },
+
+  /**
+   * Deterministic client-side clinical summary generator ensuring ZERO data leakage
+   */
+  generateClientClinicalSummary(patient, extracted = {}, redFlags = []) {
+    const age = patient.age || patient.demographics?.age || '';
+    const gender = patient.gender || patient.demographics?.gender || '';
+    const complaint = patient.chief_complaint || 'general medical consultation';
+    const hpi = patient.structured_history?.hpi || {};
+
+    const onset = extracted.onset || hpi.onset;
+    const character = extracted.character || hpi.character;
+    const site = extracted.site || hpi.site;
+    const severity = extracted.severity || hpi.severity;
+
+    const intro = age && gender
+      ? `${age}-year-old ${String(gender).toLowerCase()} presenting with ${String(complaint).toLowerCase()}.`
+      : `Patient presenting with ${complaint}.`;
+
+    const details = [];
+    if (site && !site.includes('Not')) details.push(`localized to ${site.toLowerCase()}`);
+    if (onset && !onset.includes('Not')) details.push(`starting ${onset.toLowerCase()}`);
+    if (character && !character.includes('Not') && character.toLowerCase() !== complaint.toLowerCase()) {
+      details.push(`described as ${character.toLowerCase()}`);
+    }
+    if (severity && !severity.includes('Not')) details.push(`severity rated ${severity.toLowerCase()}`);
+
+    const body = details.length > 0 ? ` Symptom details: ${details.join(', ')}.` : '';
+
+    let alertPart = ' No acute emergency red-flags identified during pre-consultation intake.';
+    if (redFlags && redFlags.length > 0) {
+      alertPart = ` Clinical Alert: Flagged for physician review regarding ${redFlags.join('; ')}.`;
+    } else if (patient.red_flag?.detected) {
+      alertPart = ` Clinical Alert: ${patient.red_flag.title}.`;
+    }
+
+    return `${intro}${body}${alertPart}`;
   },
 
   /**
@@ -530,13 +742,20 @@ export const patientService = {
         body: JSON.stringify({ status, notes, doctor_id: doctorId })
       });
       if (res.ok) {
-        return await res.json();
+        const result = await res.json();
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('caseflow-queue-updated'));
+        }
+        return result;
       }
     } catch (err) {
       console.warn('Backend verify failed, using client fallback:', err.message);
     }
     if (clientFallbackPatients[targetId]) {
       clientFallbackPatients[targetId].verification_status = status;
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('caseflow-queue-updated'));
+      }
       return clientFallbackPatients[targetId];
     }
     return null;

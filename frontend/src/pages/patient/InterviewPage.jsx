@@ -24,13 +24,30 @@ export default function InterviewPage() {
   const [lastUpdatedField, setLastUpdatedField] = useState(null);
   const [showSummaryModal, setShowSummaryModal] = useState(false);
 
-  // Initialize interview on mount
+  // Initialize interview on mount with isolated patient_id
   useEffect(() => {
     let isMounted = true;
     async function initInterview() {
       try {
-        const patientId = patientService.getCurrentPatientId() || 'CF-2026-001';
-        const initialSession = await interviewService.startSession(patientId, 'hi');
+        let patientId = patientService.getCurrentPatientId();
+        let patientRecord = null;
+        // If no patientId or if pointing to demo patient, provision an isolated patient
+        if (!patientId || patientService.isDemoPatient(patientId)) {
+          const newPat = await patientService.registerPatient({
+            name: 'New Patient',
+            age: 30,
+            gender: 'Female',
+            chief_complaint: 'Routine medical intake'
+          });
+          patientId = newPat.id;
+          patientService.setCurrentPatientId(patientId);
+          patientRecord = newPat;
+        } else {
+          patientRecord = await patientService.getPatient(patientId);
+        }
+
+        const registeredComplaint = patientRecord?.chief_complaint;
+        const initialSession = await interviewService.startSession(patientId, 'hi', registeredComplaint);
         if (isMounted) {
           setSession(initialSession);
           setLoading(false);
@@ -50,11 +67,13 @@ export default function InterviewPage() {
   const currentQuestion = session?.current_question;
   const isTerminal = currentQuestion?.is_terminal || session?.completed;
 
-  // Handle option selection with immediate optimistic sidebar update
-  const handleSelectOption = async (option) => {
-    const selectedVal = option.value || option.label;
-    setSelectedOption(selectedVal);
-    const answerText = option.label;
+  // Unified answer processing pipeline: touch and voice take the EXACT SAME path
+  const submitInterviewResponse = async (answerText, inputMode = 'touch', option = null) => {
+    if (!answerText) return;
+
+    if (option) {
+      setSelectedOption(option.value || option.label);
+    }
 
     const fieldKey =
       currentQuestion?.field_key ||
@@ -71,9 +90,9 @@ export default function InterviewPage() {
       let updatedCC = prev.chief_complaint;
 
       if (currentQuestion?.id === 'root_complaint') {
-        updatedCC = option.complaint || option.value || option.label;
+        updatedCC = option?.complaint || option?.value || option?.label || answerText.trim();
       } else if (currentQuestion?.field_key) {
-        updatedExtracted[currentQuestion.field_key] = option.value || option.label;
+        updatedExtracted[currentQuestion.field_key] = option?.value || option?.label || answerText.trim();
       }
 
       return {
@@ -87,63 +106,34 @@ export default function InterviewPage() {
       const updatedSession = await interviewService.submitAnswer(
         session?.session_id,
         answerText,
-        'touch'
+        inputMode
       );
       setSelectedOption(null);
       setSession(updatedSession);
 
+      if (session?.patient_id) {
+        await patientService.syncInterviewData(session.patient_id, {
+          chiefComplaint: updatedSession.chief_complaint,
+          extractedHistory: updatedSession.extracted_history,
+          redFlags: updatedSession.red_flags,
+          sessionCompleted: updatedSession.completed
+        });
+      }
+
       if (updatedSession.completed) {
         setShowSummaryModal(true);
       }
     } catch (err) {
-      console.error('Error submitting answer:', err);
+      console.error('Error submitting interview answer:', err);
     }
   };
 
-  // Handle voice transcript received from VoiceIndicator with immediate update
-  const handleVoiceTranscript = async (transcript) => {
-    if (!transcript) return;
+  const handleSelectOption = (option) => {
+    submitInterviewResponse(option.label, 'touch', option);
+  };
 
-    const fieldKey =
-      currentQuestion?.field_key ||
-      (currentQuestion?.id === 'root_complaint' ? 'chiefComplaint' : null);
-
-    if (fieldKey) {
-      setLastUpdatedField(fieldKey);
-    }
-
-    setSession((prev) => {
-      if (!prev) return prev;
-      const updatedExtracted = { ...(prev.extracted_history || {}) };
-      let updatedCC = prev.chief_complaint;
-
-      if (currentQuestion?.id === 'root_complaint') {
-        updatedCC = transcript;
-      } else if (currentQuestion?.field_key) {
-        updatedExtracted[currentQuestion.field_key] = transcript;
-      }
-
-      return {
-        ...prev,
-        chief_complaint: updatedCC,
-        extracted_history: updatedExtracted
-      };
-    });
-
-    try {
-      const updatedSession = await interviewService.submitAnswer(
-        session?.session_id,
-        transcript,
-        'voice'
-      );
-      setSession(updatedSession);
-
-      if (updatedSession.completed) {
-        setShowSummaryModal(true);
-      }
-    } catch (err) {
-      console.error('Error submitting voice answer:', err);
-    }
+  const handleVoiceTranscript = (transcript) => {
+    submitInterviewResponse(transcript, 'voice', null);
   };
 
   // Step back / undo last question
@@ -311,6 +301,7 @@ export default function InterviewPage() {
             <div className="pt-2 border-t border-slate-100">
               <VoiceIndicator
                 currentQuestionId={currentQuestion?.id}
+                language={session?.language || 'hi'}
                 onTranscriptReceived={handleVoiceTranscript}
               />
             </div>
@@ -362,7 +353,18 @@ export default function InterviewPage() {
         chiefComplaint={session.chief_complaint}
         extractedHistory={session.extracted_history}
         redFlags={session.red_flags}
-        onConfirm={() => {
+        onConfirm={async () => {
+          if (session?.session_id) {
+            await interviewService.completeSession(session.session_id);
+          }
+          if (session?.patient_id) {
+            await patientService.syncInterviewData(session.patient_id, {
+              chiefComplaint: session.chief_complaint,
+              extractedHistory: session.extracted_history,
+              redFlags: session.red_flags,
+              sessionCompleted: true
+            });
+          }
           setShowSummaryModal(false);
           navigate('/patient/documents');
         }}

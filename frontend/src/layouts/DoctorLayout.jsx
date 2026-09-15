@@ -1,12 +1,44 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { Stethoscope, Users, FileCheck2, ShieldAlert, ArrowLeft, RefreshCw } from 'lucide-react';
 import Badge from '../components/ui/Badge';
+import { patientService } from '../services/patientService';
 
 export default function DoctorLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const isDetailView = location.pathname.includes('/doctor/patient/');
+
+  const [queueStats, setQueueStats] = useState({
+    total: 0,
+    redFlags: 0,
+    verified: 0,
+    urgent: 0
+  });
+
+  const refreshStats = async () => {
+    try {
+      const data = await patientService.getQueue();
+      if (data && Array.isArray(data)) {
+        setQueueStats(patientService.computeQueueStats(data));
+      }
+    } catch (err) {
+      console.error('Failed to load layout queue stats:', err);
+    }
+  };
+
+  useEffect(() => {
+    refreshStats();
+
+    const handleQueueUpdated = () => {
+      refreshStats();
+    };
+
+    window.addEventListener('caseflow-queue-updated', handleQueueUpdated);
+    return () => {
+      window.removeEventListener('caseflow-queue-updated', handleQueueUpdated);
+    };
+  }, [location.pathname]);
 
   return (
     <div className="flex-1 flex flex-col bg-slate-100 min-h-0">
@@ -44,17 +76,17 @@ export default function DoctorLayout() {
           <div className="hidden md:flex items-center gap-3 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl text-xs">
             <div className="flex items-center gap-1.5 text-slate-700">
               <Users className="w-4 h-4 text-teal-700" />
-              <span>Queue: <strong>4 Patients</strong></span>
+              <span>Queue: <strong>{queueStats.total} {queueStats.total === 1 ? 'Patient' : 'Patients'}</strong></span>
             </div>
             <span className="text-slate-300">|</span>
             <div className="flex items-center gap-1.5 text-rose-700 font-bold">
               <ShieldAlert className="w-4 h-4 text-rose-600" />
-              <span>1 Red Flag</span>
+              <span>{queueStats.redFlags} {queueStats.redFlags === 1 ? 'Red Flag' : 'Red Flags'}</span>
             </div>
             <span className="text-slate-300">|</span>
             <div className="flex items-center gap-1.5 text-emerald-700">
               <FileCheck2 className="w-4 h-4 text-emerald-600" />
-              <span>1 Verified</span>
+              <span>{queueStats.verified} Verified</span>
             </div>
           </div>
 

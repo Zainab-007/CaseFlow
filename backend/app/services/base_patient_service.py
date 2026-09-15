@@ -249,8 +249,8 @@ class StatefulPatientService(BasePatientService):
             "red_flag_note": None,
             "language": "English",
             "arrived_at": "10:35 AM",
-            "verification_status": "Pending Review",
-            "doctor_notes": None,
+            "verification_status": "Verified",
+            "doctor_notes": "Reviewed and verified outpatient ENT intake.",
             "demographics": {
                 "name": "Ananya Mukherjee",
                 "age": 29,
@@ -408,7 +408,16 @@ class StatefulPatientService(BasePatientService):
 
     async def create_patient(self, patient_data: Dict[str, Any]) -> Dict[str, Any]:
         """Creates a new patient record with a unique ID and full clinical profile."""
-        new_id = f"CF-2026-{len(self._patients) + 1:03d}"
+        max_num = 4
+        for pid in self._patients.keys():
+            if pid.startswith("CF-2026-"):
+                try:
+                    num = int(pid.split("-")[-1])
+                    if num > max_num:
+                        max_num = num
+                except ValueError:
+                    pass
+        new_id = f"CF-2026-{max_num + 1:03d}"
         queue_token = f"OPD-{104 + len(self._patients)}"
         now_time = datetime.now().strftime("%I:%M %p")
 

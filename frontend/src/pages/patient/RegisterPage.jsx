@@ -17,13 +17,14 @@ export default function RegisterPage() {
   const [saving, setSaving] = useState(false);
   const [persistedNotice, setPersistedNotice] = useState(false);
 
-  // Load current patient intake data on mount if resuming an existing session
+  // Load current patient intake data on mount only if resuming an in-progress kiosk session
   useEffect(() => {
     let isMounted = true;
     async function loadCurrentPatient() {
       try {
         const patientId = patientService.getCurrentPatientId();
-        if (patientId) {
+        // NEVER populate or edit seeded demo patients (CF-2026-001 through CF-2026-004)
+        if (patientId && !patientService.isDemoPatient(patientId)) {
           const data = await patientService.getPatient(patientId);
           if (isMounted && data) {
             setName(data.name || data.demographics?.name || '');
@@ -34,6 +35,9 @@ export default function RegisterPage() {
             );
             setChiefComplaint(data.chief_complaint || '');
           }
+        } else if (patientId && patientService.isDemoPatient(patientId)) {
+          // Clear demo patient from active kiosk session
+          patientService.clearCurrentPatient();
         }
       } catch (err) {
         console.error('Error loading patient data in RegisterPage:', err);
@@ -51,14 +55,16 @@ export default function RegisterPage() {
     e.preventDefault();
     setSaving(true);
     try {
-      const patientId = patientService.getCurrentPatientId();
-      if (patientId) {
-        await patientService.updatePatient(patientId, {
+      const currentId = patientService.getCurrentPatientId();
+      // If currentId is an in-progress non-demo draft, update it.
+      // Otherwise, register a brand new patient with a unique patient_id!
+      if (currentId && !patientService.isDemoPatient(currentId)) {
+        await patientService.updatePatient(currentId, {
           name: name.trim(),
           age: parseInt(age, 10) || 30,
           gender: gender,
-          phone: abhaOrPhone.trim(),
-          abha_id: abhaOrPhone.trim(),
+          phone: abhaOrPhone.trim() || '+91 99000 00000',
+          abha_id: abhaOrPhone.trim() || 'Not linked',
           chief_complaint: chiefComplaint.trim() || 'Routine medical intake'
         });
       } else {
@@ -68,7 +74,8 @@ export default function RegisterPage() {
           gender: gender,
           phone: abhaOrPhone.trim() || '+91 99000 00000',
           abha_id: abhaOrPhone.trim() || 'Not linked',
-          chief_complaint: chiefComplaint.trim() || 'Routine medical intake'
+          chief_complaint: chiefComplaint.trim() || 'Routine medical intake',
+          preferred_language: 'Hindi / English'
         });
         if (created?.id) {
           patientService.setCurrentPatientId(created.id);

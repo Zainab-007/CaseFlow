@@ -26,6 +26,15 @@ export default function DoctorDashboardPage() {
 
   useEffect(() => {
     fetchQueue();
+
+    const handleQueueUpdated = () => {
+      fetchQueue();
+    };
+
+    window.addEventListener('caseflow-queue-updated', handleQueueUpdated);
+    return () => {
+      window.removeEventListener('caseflow-queue-updated', handleQueueUpdated);
+    };
   }, []);
 
   const filteredPatients = patients.filter((p) => {
@@ -40,8 +49,7 @@ export default function DoctorDashboardPage() {
     return matchesSearch && matchesPriority;
   });
 
-  const urgentCount = patients.filter((p) => p.triage_priority === 'Urgent').length;
-  const redFlagCount = patients.filter((p) => p.red_flag_detected).length;
+  const queueStats = patientService.computeQueueStats(patients);
 
   return (
     <div className="max-w-7xl mx-auto p-6 space-y-6">
@@ -53,7 +61,7 @@ export default function DoctorDashboardPage() {
               Active OPD Queue
             </p>
             <h3 className="text-3xl font-black text-slate-900 mt-1">
-              {patients.length} <span className="text-xs font-medium text-slate-500">Patients</span>
+              {queueStats.total} <span className="text-xs font-medium text-slate-500">{queueStats.total === 1 ? 'Patient' : 'Patients'}</span>
             </h3>
           </div>
           <div className="w-12 h-12 rounded-xl bg-teal-50 text-teal-800 flex items-center justify-center font-bold">
@@ -67,7 +75,7 @@ export default function DoctorDashboardPage() {
               Urgent Triage
             </p>
             <h3 className="text-3xl font-black text-rose-700 mt-1">
-              {urgentCount} <span className="text-xs font-medium text-rose-600">Immediate</span>
+              {queueStats.urgent} <span className="text-xs font-medium text-rose-600">Immediate</span>
             </h3>
           </div>
           <div className="w-12 h-12 rounded-xl bg-rose-50 text-rose-700 flex items-center justify-center font-bold">
@@ -81,7 +89,7 @@ export default function DoctorDashboardPage() {
               Red Flags Detected
             </p>
             <h3 className="text-3xl font-black text-amber-900 mt-1">
-              {redFlagCount} <span className="text-xs font-medium text-amber-700">Flagged</span>
+              {queueStats.redFlags} <span className="text-xs font-medium text-amber-700">Flagged</span>
             </h3>
           </div>
           <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-800 flex items-center justify-center font-bold">

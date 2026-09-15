@@ -46,13 +46,24 @@ export default function ReviewPage() {
     };
   }, []);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     setSubmitted(true);
+    const patientId = patientService.getCurrentPatientId();
+    if (patientId) {
+      try {
+        await patientService.updatePatient(patientId, {
+          intake_status: 'Completed'
+        });
+      } catch (err) {
+        console.warn('Failed to mark intake completed:', err);
+      }
+    }
     // Simulate auto-reset countdown for shared kiosk privacy
     const timer = setInterval(() => {
       setCountdown((prev) => {
         if (prev <= 1) {
           clearInterval(timer);
+          patientService.clearCurrentPatient();
           navigate('/patient');
           return 0;
         }
@@ -141,7 +152,10 @@ export default function ReviewPage() {
             variant="kiosk"
             size="lg"
             icon={RotateCcw}
-            onClick={() => navigate('/patient')}
+            onClick={() => {
+              patientService.clearCurrentPatient();
+              navigate('/patient');
+            }}
             className="w-full py-4 text-lg"
           >
             Finish & Reset Now (समाप्त करें)
