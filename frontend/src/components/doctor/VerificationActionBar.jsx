@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import Button from '../ui/Button';
 import Modal from '../ui/Modal';
+import EditClinicalRecordModal from './EditClinicalRecordModal';
 import { Check, Edit3, XCircle, Share2, ShieldCheck, CheckCircle2 } from 'lucide-react';
 
 /**
@@ -12,6 +13,7 @@ export default function VerificationActionBar({
   patientId,
   currentStatus = 'Pending Review',
   onStatusChange,
+  onSaveDoctorEdit,
 }) {
   const [modalType, setModalType] = useState(null); // 'verify' | 'edit' | 'reject' | 'fhir'
   const [doctorNotes, setDoctorNotes] = useState('');
@@ -124,31 +126,15 @@ export default function VerificationActionBar({
       </Modal>
 
       {/* Edit Modal */}
-      <Modal
+      <EditClinicalRecordModal
         isOpen={modalType === 'edit'}
         onClose={() => setModalType(null)}
-        title="Edit Clinical Intake Summary"
-        subtitle="Amend or correct any patient-reported or AI-extracted detail."
-        footer={
-          <>
-            <Button variant="outline" onClick={() => setModalType(null)}>Cancel</Button>
-            <Button variant="primary" onClick={() => handleAction('Edited')}>
-              Save Clinical Edits
-            </Button>
-          </>
-        }
-      >
-        <div className="space-y-3 text-sm">
-          <p className="text-xs text-slate-500">
-            You can overwrite any inaccurate symptom description or amend the clinical summary:
-          </p>
-          <textarea
-            rows={5}
-            defaultValue="Patient clarifies that breathlessness only occurs when climbing more than 2 flights of stairs, not at rest. Productive cough ongoing for 10 days."
-            className="w-full text-xs p-3 rounded-lg border border-slate-300 font-sans"
-          />
-        </div>
-      </Modal>
+        patient={patient}
+        onSave={async (editedData) => {
+          await onSaveDoctorEdit?.(editedData);
+          setModalType(null);
+        }}
+      />
 
       {/* Reject Modal */}
       <Modal

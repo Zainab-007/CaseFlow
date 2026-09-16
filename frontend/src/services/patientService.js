@@ -434,7 +434,7 @@ export const patientService = {
     if (!targetId) return null;
 
     // Safety guard: Demo patients are immutable from kiosk registration
-    if (this.isDemoPatient(targetId)) {
+    if (this.isDemoPatient(targetId) && !updateData.is_doctor_edit) {
       console.warn(`Prevented overwriting seeded demo patient ${targetId}. Creating isolated patient instead.`);
       return this.registerPatient(updateData);
     }
@@ -508,11 +508,83 @@ export const patientService = {
       p.abha_id = updateData.abha_id;
       if (p.demographics) p.demographics.abha_id = updateData.abha_id;
     }
+    if (!p.structured_history) {
+      p.structured_history = { hpi: {}, past_medical_history: [], current_medications: [], labs: [], allergies: [] };
+    }
     if (updateData.chief_complaint) {
       p.chief_complaint = updateData.chief_complaint;
-      if (p.structured_history?.hpi) p.structured_history.hpi.character = updateData.chief_complaint;
-      p.ai_clinical_summary = this.generateClientClinicalSummary(p);
+      if (p.structured_history.hpi) p.structured_history.hpi.character = updateData.chief_complaint;
     }
+    if (updateData.hpi && typeof updateData.hpi === 'object') {
+      p.structured_history.hpi = { ...(p.structured_history.hpi || {}), ...updateData.hpi };
+    }
+    if (Array.isArray(updateData.past_medical_history)) {
+      p.structured_history.past_medical_history = updateData.past_medical_history;
+    }
+    if (Array.isArray(updateData.allergies)) {
+      p.structured_history.allergies = updateData.allergies;
+    }
+
+    // Update medications with provenance preservation
+    const medsIn = updateData.current_medications || updateData.medications;
+    if (Array.isArray(medsIn)) {
+      const existingMeds = p.structured_history.current_medications || [];
+      const norm = (n) => (n || '').toLowerCase().replace(/^(tab\.|cap\.|syp\.|inj\.)\s*/i, '').trim();
+      const updatedMeds = medsIn.map(m => {
+        const match = existingMeds.find(em => norm(em.name) === norm(m.name));
+        return {
+          name: m.name,
+          dose: m.dose || m.dosage || '',
+          frequency: m.frequency || '',
+          duration: m.duration || '',
+          source: m.source || match?.source || 'doctor',
+          verified_by: m.verified_by || 'doctor'
+        };
+      });
+      p.structured_history.current_medications = updatedMeds;
+      p.medications = updatedMeds;
+    }
+
+    // Update labs with provenance preservation
+    if (Array.isArray(updateData.labs)) {
+      const existingLabs = p.structured_history.labs || [];
+      const normLab = (n) => (n || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      const updatedLabs = updateData.labs.map(l => {
+        const pName = l.parameter || l.name;
+        const match = existingLabs.find(el => normLab(el.parameter || el.name) === normLab(pName));
+        return {
+          name: pName,
+          parameter: pName,
+          value: String(l.value || ''),
+          unit: l.unit || '',
+          status: l.status || 'Normal',
+          reference_range: l.reference_range || '',
+          source: l.source || match?.source || 'doctor',
+          verified_by: l.verified_by || 'doctor'
+        };
+      });
+      p.structured_history.labs = updatedLabs;
+      p.labs = updatedLabs;
+    }
+
+    if (updateData.is_doctor_edit) {
+      if (!p.timeline) p.timeline = [];
+      p.timeline.push({
+        id: `TL-DOC-${Date.now()}`,
+        patient_id: targetId,
+        type: 'doctor_edit',
+        category: 'Doctor Edit',
+        source: 'doctor',
+        title: 'Record updated by doctor',
+        description: 'Clinical record edited and saved by physician',
+        timestamp: new Date().toISOString(),
+        date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      });
+    }
+
+    p.ai_clinical_summary = this.generateClientClinicalSummary(p);
+
     if (updateData.intake_status) {
       p.intake_status = updateData.intake_status;
       if (updateData.intake_status === 'Completed') {

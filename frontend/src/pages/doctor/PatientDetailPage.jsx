@@ -69,6 +69,8 @@ export default function PatientDetailPage() {
     };
   }, [id]);
 
+  const [successToast, setSuccessToast] = useState(null);
+
   const handleStatusChange = async (newStatus, notes) => {
     setVerificationStatus(newStatus);
     try {
@@ -77,6 +79,26 @@ export default function PatientDetailPage() {
       console.warn('Status update sync failed:', err);
     }
     alert(`Record status updated to "${newStatus}". Final documentation authority logged under Dr. S. K. Mehta.`);
+  };
+
+  const handleSaveDoctorEdit = async (editedData) => {
+    try {
+      const updated = await patientService.updatePatient(patient?.id || id, {
+        ...editedData,
+        is_doctor_edit: true
+      });
+      if (updated) {
+        if (!updated.documents || updated.documents.length === 0) {
+          updated.documents = patient?.documents || [];
+        }
+        setPatient(updated);
+        setSuccessToast('Record updated successfully.');
+        setTimeout(() => setSuccessToast(null), 4000);
+      }
+    } catch (err) {
+      console.error('Failed to save doctor edits:', err);
+      throw err;
+    }
   };
 
   if (loading) {
@@ -726,12 +748,21 @@ export default function PatientDetailPage() {
         </div>
       )}
 
+      {/* Success Notification Banner */}
+      {successToast && (
+        <div className="fixed top-5 right-5 z-50 bg-emerald-700 text-white px-4 py-3 rounded-xl shadow-xl flex items-center gap-2 text-xs font-bold animate-in fade-in slide-in-from-top-3 duration-200">
+          <CheckCircle2 className="w-4 h-4 text-emerald-200 shrink-0" />
+          <span>{successToast}</span>
+        </div>
+      )}
+
       {/* Doctor Bottom Verification & Authority Bar */}
       <VerificationActionBar
         patient={patient}
         patientId={patient.id}
         currentStatus={verificationStatus}
         onStatusChange={handleStatusChange}
+        onSaveDoctorEdit={handleSaveDoctorEdit}
       />
     </div>
   );

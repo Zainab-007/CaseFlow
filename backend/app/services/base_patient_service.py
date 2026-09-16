@@ -762,13 +762,140 @@ class StatefulPatientService(BasePatientService):
             if "abha_id" in update_data and update_data["abha_id"] is not None:
                 patient["demographics"]["abha_id"] = update_data["abha_id"]
 
+        # Ensure structured_history exists
+        if "structured_history" not in patient or not isinstance(patient["structured_history"], dict):
+            patient["structured_history"] = {
+                "hpi": {},
+                "past_medical_history": [],
+                "current_medications": [],
+                "labs": [],
+                "allergies": []
+            }
+        struct_hist = patient["structured_history"]
+
         # Update chief complaint in structured history if provided
         if "chief_complaint" in update_data and update_data["chief_complaint"] is not None:
             comp = update_data["chief_complaint"]
             patient["chief_complaint"] = comp
-            if "structured_history" in patient and "hpi" in patient["structured_history"]:
-                patient["structured_history"]["hpi"]["character"] = comp
-            patient["ai_clinical_summary"] = self.generate_patient_clinical_summary(patient=patient)
+            struct_hist.setdefault("hpi", {})["character"] = comp
+
+        # Update HPI fields if provided
+        if "hpi" in update_data and isinstance(update_data["hpi"], dict):
+            struct_hist.setdefault("hpi", {}).update(update_data["hpi"])
+            if "character" in update_data["hpi"] and "chief_complaint" not in update_data:
+                patient["chief_complaint"] = update_data["hpi"]["character"]
+
+        # Update past medical history if provided
+        if "past_medical_history" in update_data and isinstance(update_data["past_medical_history"], list):
+            struct_hist["past_medical_history"] = update_data["past_medical_history"]
+
+        # Update allergies if provided
+        if "allergies" in update_data and isinstance(update_data["allergies"], list):
+            struct_hist["allergies"] = update_data["allergies"]
+
+        # Helper for medication normalization
+        def _norm_med_name(name: str) -> str:
+            clean = re.sub(r"^(tab\.|cap\.|syp\.|inj\.)\s*", "", (name or "").strip(), flags=re.IGNORECASE)
+            clean = re.sub(r"\s*\d+(\.\d+)?\s*(mg|g|ml|mcg)\b.*$", "", clean, flags=re.IGNORECASE)
+            return clean.lower().strip()
+
+        # Update medications if provided (preserving provenance)
+        meds_input = None
+        if "current_medications" in update_data and update_data["current_medications"] is not None:
+            meds_input = update_data["current_medications"]
+        elif "medications" in update_data and update_data["medications"] is not None:
+            meds_input = update_data["medications"]
+
+        if meds_input is not None and isinstance(meds_input, list):
+            existing_meds = struct_hist.get("current_medications", [])
+            existing_map = {_norm_med_name(m.get("name", "")): m for m in existing_meds if isinstance(m, dict)}
+
+            updated_meds = []
+            for item in meds_input:
+                if not isinstance(item, dict) or not item.get("name"):
+                    continue
+                norm_key = _norm_med_name(item.get("name", ""))
+                matched_existing = existing_map.get(norm_key)
+
+                # Preserve existing source or assign doctor
+                if matched_existing and matched_existing.get("source"):
+                    source = item.get("source") or matched_existing.get("source")
+                else:
+                    source = item.get("source") or "doctor"
+
+                med_record = {
+                    "name": item.get("name"),
+                    "dose": item.get("dose") or item.get("dosage") or "",
+                    "frequency": item.get("frequency") or "",
+                    "duration": item.get("duration") or "",
+                    "source": source
+                }
+                if item.get("adherence"):
+                    med_record["adherence"] = item.get("adherence")
+                # Add verified_by doctor metadata
+                med_record["verified_by"] = item.get("verified_by") or "doctor"
+                updated_meds.append(med_record)
+
+            struct_hist["current_medications"] = updated_meds
+            patient["medications"] = updated_meds
+
+        # Helper for lab test normalization
+        def _norm_lab_name(name: str) -> str:
+            return re.sub(r"[^a-z0-9]", "", (name or "").lower())
+
+        # Update labs if provided (preserving provenance)
+        if "labs" in update_data and update_data["labs"] is not None and isinstance(update_data["labs"], list):
+            existing_labs = struct_hist.get("labs", [])
+            existing_lab_map = {_norm_lab_name(l.get("parameter") or l.get("name") or ""): l for l in existing_labs if isinstance(l, dict)}
+
+            updated_labs = []
+            for item in update_data["labs"]:
+                if not isinstance(item, dict):
+                    continue
+                param = item.get("parameter") or item.get("name")
+                if not param:
+                    continue
+                norm_key = _norm_lab_name(param)
+                matched_existing = existing_lab_map.get(norm_key)
+
+                if matched_existing and matched_existing.get("source"):
+                    source = item.get("source") or matched_existing.get("source")
+                else:
+                    source = item.get("source") or "doctor"
+
+                lab_record = {
+                    "name": param,
+                    "parameter": param,
+                    "value": str(item.get("value", "")),
+                    "unit": item.get("unit") or "",
+                    "status": item.get("status") or "Normal",
+                    "reference_range": item.get("reference_range") or "",
+                    "source": source,
+                    "verified_by": item.get("verified_by") or "doctor"
+                }
+                updated_labs.append(lab_record)
+
+            struct_hist["labs"] = updated_labs
+            patient["labs"] = updated_labs
+
+        # Doctor Edit Timeline Event
+        if update_data.get("is_doctor_edit"):
+            now_dt = datetime.now()
+            patient.setdefault("timeline", []).append({
+                "id": f"TL-DOC-{uuid.uuid4().hex[:8].upper()}",
+                "patient_id": patient_id,
+                "type": "doctor_edit",
+                "category": "Doctor Edit",
+                "source": "doctor",
+                "title": "Record updated by doctor",
+                "description": "Clinical record edited and saved by physician",
+                "timestamp": now_dt.isoformat(),
+                "date": now_dt.strftime("%d %b %Y"),
+                "time": now_dt.strftime("%I:%M %p")
+            })
+
+        # Refresh AI clinical summary
+        patient["ai_clinical_summary"] = self.generate_patient_clinical_summary(patient=patient)
 
         # Ensure interview completed event in timeline if intake is completed
         if update_data.get("intake_status") == "Completed":

@@ -20,6 +20,8 @@ export default function ClinicalTimeline({ events = [] }) {
       case 'radiology':
         return Activity;
       case 'consultation':
+      case 'doctor edit':
+      case 'doctor':
         return Stethoscope;
       default:
         return Calendar;

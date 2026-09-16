@@ -3,7 +3,7 @@ Pydantic schemas for patient demographics, registration, and queue records.
 Designed with ABDM/FHIR alignment in mind.
 """
 
-from typing import Optional, List
+from typing import Optional, List, Any
 from pydantic import BaseModel, Field
 
 
@@ -56,4 +56,12 @@ class PatientUpdate(BaseModel):
     department: Optional[str] = None
     chief_complaint: Optional[str] = None
     intake_status: Optional[str] = None
+    hpi: Optional[dict] = None
+    past_medical_history: Optional[List[Any]] = None
+    allergies: Optional[List[Any]] = None
+    current_medications: Optional[List[dict]] = None
+    medications: Optional[List[dict]] = None
+    labs: Optional[List[dict]] = None
+    structured_history: Optional[dict] = None
+    is_doctor_edit: Optional[bool] = False
 
