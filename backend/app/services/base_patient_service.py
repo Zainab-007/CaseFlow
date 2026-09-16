@@ -593,12 +593,14 @@ class StatefulPatientService(BasePatientService):
         chief_complaint: Optional[str],
         extracted_history: Dict[str, Any],
         red_flags: List[str],
-        session_completed: bool = False
+        session_completed: bool = False,
+        language: Optional[str] = None
     ):
         """Synchronizes patient interview responses directly into that patient's clinical record."""
         patient = self._patients.get(patient_id)
         if not patient:
             # Auto-provision patient record if started from interview directly
+            lang_display = "Hindi" if language == "hi" else ("English" if language == "en" else (language or "Hindi / English"))
             patient = {
                 "id": patient_id,
                 "queue_token": f"OPD-{104 + len(self._patients)}",
@@ -612,7 +614,7 @@ class StatefulPatientService(BasePatientService):
                 "intake_status": "Interview in progress",
                 "red_flag_detected": False,
                 "red_flag_note": None,
-                "language": "Hindi / English",
+                "language": lang_display,
                 "arrived_at": datetime.now().strftime("%I:%M %p"),
                 "verification_status": "Pending Review",
                 "doctor_notes": None,
@@ -632,7 +634,11 @@ class StatefulPatientService(BasePatientService):
             }
             self._patients[patient_id] = patient
 
-        # 1. Update chief complaint
+        # 1. Update chief complaint and language
+        if language:
+            lang_display = "Hindi" if language == "hi" else ("English" if language == "en" else language)
+            patient["language"] = lang_display
+
         if chief_complaint and chief_complaint not in ["Not yet provided", "Not provided"]:
             patient["chief_complaint"] = chief_complaint
             if "demographics" in patient:

@@ -47,7 +47,8 @@ export default function InterviewPage() {
         }
 
         const registeredComplaint = patientRecord?.chief_complaint;
-        const initialSession = await interviewService.startSession(patientId, 'hi', registeredComplaint);
+        const selectedLang = patientService.getPatientLanguage(patientId) || patientRecord?.language || 'en';
+        const initialSession = await interviewService.startSession(patientId, selectedLang, registeredComplaint);
         if (isMounted) {
           setSession(initialSession);
           setLoading(false);
@@ -116,7 +117,8 @@ export default function InterviewPage() {
           chiefComplaint: updatedSession.chief_complaint,
           extractedHistory: updatedSession.extracted_history,
           redFlags: updatedSession.red_flags,
-          sessionCompleted: updatedSession.completed
+          sessionCompleted: updatedSession.completed,
+          language: updatedSession.language
         });
       }
 
@@ -244,10 +246,10 @@ export default function InterviewPage() {
               <div className="text-center py-8">
                 <CheckCircle2 className="w-14 h-14 text-emerald-600 mx-auto mb-3" />
                 <h2 className="text-2xl font-black text-slate-900">
-                  All Questions Completed
+                  {session?.completion_message?.title || 'All Questions Completed'}
                 </h2>
                 <p className="text-sm font-semibold text-slate-600 mt-1">
-                  Click Review Case to inspect your summary before continuing.
+                  {session?.completion_message?.subtitle || 'Click Review Case to inspect your summary before continuing.'}
                 </p>
               </div>
             )}

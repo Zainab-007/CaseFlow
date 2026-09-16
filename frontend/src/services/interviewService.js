@@ -13,11 +13,31 @@ const API_BASE_URL = (typeof import.meta !== 'undefined' && import.meta.env?.VIT
   ? `${import.meta.env.VITE_API_BASE_URL}/interviews`
   : 'http://127.0.0.1:8000/api/v1/interviews';
 
+export function canonicalLanguage(lang) {
+  if (!lang || typeof lang !== 'string') return 'en';
+  const cleaned = lang.trim().toLowerCase();
+  if (['hi', 'hindi', 'हिंदी', 'hin'].includes(cleaned)) return 'hi';
+  if (['en', 'english', 'en-us', 'en-in'].includes(cleaned)) return 'en';
+  return 'en';
+}
+
+export const COMPLETION_MESSAGES = {
+  en: {
+    title: 'All Questions Completed',
+    subtitle: 'Thank you. Your initial assessment is complete. Please inspect your summary before continuing.'
+  },
+  hi: {
+    title: 'सभी प्रश्न पूरे हो चुके हैं',
+    subtitle: 'धन्यवाद। आपका प्रारंभिक मूल्यांकन पूरा हो गया है। जारी रखने से पहले कृपया अपना विवरण देखें।'
+  }
+};
+
 // In-memory client fallback session
 let clientFallbackSession = null;
 
-function initClientFallback(patientId = null, language = 'hi', chiefComplaint = null) {
+function initClientFallback(patientId = null, language = 'en', chiefComplaint = null) {
   const targetPatientId = patientId || patientService.getCurrentPatientId() || 'CF-2026-005';
+  const canonicalLang = canonicalLanguage(language);
 
   let cleanedCC = chiefComplaint && String(chiefComplaint).trim() ? String(chiefComplaint).trim() : null;
 
@@ -32,7 +52,7 @@ function initClientFallback(patientId = null, language = 'hi', chiefComplaint = 
   clientFallbackSession = {
     session_id: 'client-' + Math.random().toString(36).substring(2, 9),
     patient_id: targetPatientId,
-    language: language,
+    language: canonicalLang,
     chief_complaint: cleanedCC || null,
     current_question_id: initialQId,
     question_stack: [initialQId],
@@ -48,19 +68,23 @@ function formatClientState() {
   if (!clientFallbackSession) return null;
   const currentQId = clientFallbackSession.current_question_id;
   const currentQ = currentQId ? QUESTION_ONTOLOGY[currentQId] : null;
+  const isCompleted = clientFallbackSession.completed;
+  const lang = canonicalLanguage(clientFallbackSession.language);
+  const completionMsg = isCompleted ? (COMPLETION_MESSAGES[lang] || COMPLETION_MESSAGES.en) : null;
 
   return {
     session_id: clientFallbackSession.session_id,
     patient_id: clientFallbackSession.patient_id,
-    language: clientFallbackSession.language,
+    language: lang,
     chief_complaint: clientFallbackSession.chief_complaint,
     current_step: clientFallbackSession.history.length + 1,
     total_estimated_steps: 7,
-    completed: clientFallbackSession.completed,
+    completed: isCompleted,
     current_question: currentQ,
     history: clientFallbackSession.history,
     extracted_history: clientFallbackSession.extracted_history,
-    red_flags: clientFallbackSession.red_flags
+    red_flags: clientFallbackSession.red_flags,
+    completion_message: completionMsg
   };
 }
 
@@ -196,15 +220,16 @@ export const interviewService = {
   /**
    * Start a new adaptive interview session bound to patientId
    */
-  async startSession(patientId = null, language = 'hi', chiefComplaint = null) {
+  async startSession(patientId = null, language = 'en', chiefComplaint = null) {
     const targetPatientId = patientId || patientService.getCurrentPatientId() || 'CF-2026-005';
+    const canonicalLang = canonicalLanguage(language);
     try {
       const response = await fetch(`${API_BASE_URL}/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           patient_id: targetPatientId,
-          language,
+          language: canonicalLang,
           chief_complaint: chiefComplaint || undefined
         })
       });

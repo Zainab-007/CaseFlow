@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import Button from '../../components/ui/Button';
 import BigOptionCard from '../../components/patient/BigOptionCard';
 import AudioPromptBar from '../../components/patient/AudioPromptBar';
+import { patientService } from '../../services/patientService';
 import { ArrowRight, ArrowLeft, Globe2, Languages } from 'lucide-react';
 
 const LANGUAGES = [
@@ -10,15 +11,16 @@ const LANGUAGES = [
   { id: 'en', title: 'English', subtitle: 'Standard Clinical English', badge: 'Voice + Text', status: 'Ready' },
   { id: 'hinglish', title: 'Hinglish', subtitle: 'Hindi + English Mix (मिश्रित भाषा)', badge: 'Voice + Text', status: 'Ready' },
   { id: 'mr', title: 'मराठी', subtitle: 'Marathi (लवकरच येत आहे)', badge: 'Indian Language', status: 'Planned' },
-  { id: 'gu', title: 'ગુજરાતી', subtitle: 'Gujarati (ટૂંક સમયમાં આવી રહ્યું છે)', badge: 'Indian Language', status: 'Planned' },
+  { id: 'gu', title: 'ગુજરાતી', subtitle: 'Gujarati (ટૂંક समयમાં આવી રહ્યું છે)', badge: 'Indian Language', status: 'Planned' },
   { id: 'bn', title: 'বাংলা', subtitle: 'Bengali (শীঘ্রই আসছে)', badge: 'Indian Language', status: 'Planned' },
 ];
 
 export default function LanguagePage() {
   const navigate = useNavigate();
-  const [selectedLang, setSelectedLang] = useState('hi');
+  const [selectedLang, setSelectedLang] = useState(() => patientService.getPatientLanguage() || 'hi');
 
   const handleContinue = () => {
+    patientService.setPatientLanguage(selectedLang);
     navigate('/patient/interview');
   };
 

@@ -14,6 +14,7 @@ class PatientBase(BaseModel):
     phone: Optional[str] = Field(None, example="9876543210")
     abha_id: Optional[str] = Field(None, example="91-4829-1029-4821")
     preferred_language: str = Field(default="Hindi", example="Hindi")
+    language: Optional[str] = Field(default="en", example="en")
     department: str = Field(default="General Medicine", example="General Medicine")
     chief_complaint: Optional[str] = Field(None, example="Headache")
 
@@ -53,6 +54,7 @@ class PatientUpdate(BaseModel):
     phone: Optional[str] = None
     abha_id: Optional[str] = None
     preferred_language: Optional[str] = None
+    language: Optional[str] = None
     department: Optional[str] = None
     chief_complaint: Optional[str] = None
     intake_status: Optional[str] = None

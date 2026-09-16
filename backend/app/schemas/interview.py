@@ -36,7 +36,7 @@ class HistoryTurn(BaseModel):
 
 class StartSessionRequest(BaseModel):
     patient_id: str = "CF-PAT-01"
-    language: str = "hi"
+    language: str = "en"
     chief_complaint: Optional[str] = None
 
 
@@ -57,6 +57,7 @@ class AdaptiveSessionState(BaseModel):
     history: List[Dict[str, Any]] = []
     extracted_history: Dict[str, Any]
     red_flags: List[str] = []
+    completion_message: Optional[Dict[str, str]] = None
 
 
 # Backward compatibility schemas
@@ -81,7 +82,7 @@ class PatientAnswer(BaseModel):
 class InterviewSession(BaseModel):
     session_id: str
     patient_id: str
-    language: str = "hi"
+    language: str = "en"
     current_step: int = 1
     total_steps: int = 6
     is_completed: bool = False

@@ -394,6 +394,33 @@ QUESTION_TREE: Dict[str, Dict[str, Any]] = {
 }
 
 
+def canonical_language(lang: Optional[str]) -> str:
+    """
+    Ensure single canonical representation: 'en' or 'hi'.
+    Defaults safely to 'en' for any missing or invalid language.
+    """
+    if not lang or not isinstance(lang, str):
+        return "en"
+    cleaned = lang.strip().lower()
+    if cleaned in ("hi", "hindi", "हिंदी", "hin"):
+        return "hi"
+    if cleaned in ("en", "english", "en-us", "en-in"):
+        return "en"
+    return "en"
+
+
+COMPLETION_MESSAGES: Dict[str, Dict[str, str]] = {
+    "en": {
+        "title": "All Questions Completed",
+        "subtitle": "Thank you. Your initial assessment is complete. Please inspect your summary before continuing."
+    },
+    "hi": {
+        "title": "सभी प्रश्न पूरे हो चुके हैं",
+        "subtitle": "धन्यवाद। आपका प्रारंभिक मूल्यांकन पूरा हो गया है। जारी रखने से पहले कृपया अपना विवरण देखें।"
+    }
+}
+
+
 class AdaptiveInterviewEngine:
     """
     Stateful adaptive interview session manager.
@@ -406,34 +433,36 @@ class AdaptiveInterviewEngine:
     def classify_symptom_intent(self, text: Optional[str]) -> str:
         """
         Broad intent mapping: classifies free-text chief complaints into clinical question pathways.
+        Supports both English and Hindi (Devanagari) phrases deterministically.
         Does NOT diagnose diseases. Falls back safely to generic clarification.
         """
         if not text or not str(text).strip():
             return "root_complaint"
         t = str(text).lower()
         # 1. Bleeding / Hemorrhage symptoms
-        if any(k in t for k in ["bleed", "blood", "khoon", "hemorrhage", "spotting", "hematuria", "intimate", "discharge", "cut", "wound"]):
+        if any(k in t for k in ["खून", "रक्त", "bleed", "blood", "khoon", "hemorrhage", "spotting", "hematuria", "intimate", "discharge", "cut", "wound"]):
             return "bleeding_onset"
         # 2. Chest discomfort / Cardiac
-        if any(k in t for k in ["chest", "seena", "heart", "angina", "retrosternal", "palpitation", "crushing"]):
+        if any(k in t for k in ["छाती", "सीना", "दिल", "chest", "seena", "heart", "angina", "retrosternal", "palpitation", "crushing"]):
             return "chest_character"
         # 3. Respiratory / Cough
-        if any(k in t for k in ["cough", "khansi", "sputum", "balgam", "phlegm", "wheez", "saans", "breathless"]):
+        if any(k in t for k in ["खांसी", "खराश", "बलगम", "cough", "khansi", "sputum", "balgam", "phlegm", "wheez", "saans", "breathless"]):
             return "cough_type"
         # 4. Fever / Systemic chills
-        if any(k in t for k in ["fever", "bukhar", "chill", "shiver", "thand", "temperature", "tap"]):
+        if any(k in t for k in ["बुखार", "ठंड", "ताप", "fever", "bukhar", "chill", "shiver", "thand", "temperature", "tap"]):
             return "fever_pattern"
-        # 5. Headache / Neurological
-        if any(k in t for k in ["headache", "sir dard", "sar dard", "migrain", "head pain", "sir me dard", "sar me dard"]):
+        # 5. Headache / Neurological (checked before generic body ache)
+        if any(k in t for k in ["सिरदर्द", "सिर में दर्द", "सरदर्द", "सर में दर्द", "सिर दर्द", "सर दर्द", "headache", "sir dard", "sar dard", "migrain", "head pain", "sir me dard", "sar me dard"]):
             return "headache_type"
         # 6. Abdominal / GI pain symptoms (SOCRATES)
-        if any(k in t for k in ["stomach", "abdominal", "abdomen", "pet", "dard", "belly", "cramp", "gastric", "acid", "burning", "colic", "pain"]):
+        if any(k in t for k in ["पेट में दर्द", "पेट दर्द", "पेट", "stomach", "abdominal", "abdomen", "pet", "belly", "cramp", "gastric", "acid", "burning", "colic", "pain", "dard"]):
             return "abdo_site"
         # 7. Safe generic clarification pathway for all other unknown complaints
         return "generic_onset"
 
-    def start_session(self, patient_id: str, language: str = "hi", chief_complaint: Optional[str] = None) -> Dict[str, Any]:
+    def start_session(self, patient_id: str, language: str = "en", chief_complaint: Optional[str] = None) -> Dict[str, Any]:
         session_id = str(uuid.uuid4())[:8]
+        canonical_lang = canonical_language(language)
 
         cleaned_cc = str(chief_complaint).strip() if chief_complaint and str(chief_complaint).strip() else None
 
@@ -461,7 +490,7 @@ class AdaptiveInterviewEngine:
         session = {
             "session_id": session_id,
             "patient_id": patient_id,
-            "language": language,
+            "language": canonical_lang,
             "current_question_id": initial_qid,
             "history": [],  # list of {question, answer, question_id, extracted}
             "question_stack": [initial_qid],
@@ -483,6 +512,22 @@ class AdaptiveInterviewEngine:
             "completed": False
         }
         self._sessions[session_id] = session
+
+        # Synchronize language and intake session with patient record if present
+        try:
+            from app.services.base_patient_service import patient_service
+            if patient_id:
+                patient_service.sync_interview_data(
+                    patient_id=patient_id,
+                    chief_complaint=session_cc,
+                    extracted_history=session["extracted_history"],
+                    red_flags=[],
+                    session_completed=False,
+                    language=canonical_lang
+                )
+        except Exception:
+            pass
+
         return self._format_session_state(session)
 
     def get_session(self, session_id: str) -> Optional[Dict[str, Any]]:
@@ -531,7 +576,8 @@ class AdaptiveInterviewEngine:
                     chief_complaint=session.get("chief_complaint"),
                     extracted_history=session.get("extracted_history", {}),
                     red_flags=session.get("red_flags", []),
-                    session_completed=session.get("completed", False)
+                    session_completed=session.get("completed", False),
+                    language=session.get("language")
                 )
         except Exception as e:
             pass
@@ -566,7 +612,8 @@ class AdaptiveInterviewEngine:
                     chief_complaint=session.get("chief_complaint"),
                     extracted_history=session.get("extracted_history", {}),
                     red_flags=session.get("red_flags", []),
-                    session_completed=False
+                    session_completed=False,
+                    language=session.get("language")
                 )
         except Exception:
             pass
@@ -589,7 +636,8 @@ class AdaptiveInterviewEngine:
                     chief_complaint=session.get("chief_complaint"),
                     extracted_history=session.get("extracted_history", {}),
                     red_flags=session.get("red_flags", []),
-                    session_completed=True
+                    session_completed=True,
+                    language=session.get("language")
                 )
         except Exception:
             pass
@@ -655,19 +703,23 @@ class AdaptiveInterviewEngine:
     def _format_session_state(self, session: Dict[str, Any]) -> Dict[str, Any]:
         current_q_id = session["current_question_id"]
         current_q = QUESTION_TREE.get(current_q_id) if current_q_id else None
+        is_completed = session["completed"]
+        lang = canonical_language(session.get("language", "en"))
+        completion_msg = COMPLETION_MESSAGES.get(lang, COMPLETION_MESSAGES["en"]) if is_completed else None
 
         return {
             "session_id": session["session_id"],
             "patient_id": session["patient_id"],
-            "language": session["language"],
+            "language": lang,
             "chief_complaint": session["chief_complaint"],
             "current_step": len(session["history"]) + 1,
             "total_estimated_steps": 7,
-            "completed": session["completed"],
+            "completed": is_completed,
             "current_question": current_q,
             "history": session["history"],
             "extracted_history": session["extracted_history"],
-            "red_flags": session["red_flags"]
+            "red_flags": session["red_flags"],
+            "completion_message": completion_msg
         }
 
 

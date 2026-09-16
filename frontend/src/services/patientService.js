@@ -352,6 +352,32 @@ export const patientService = {
   clearCurrentPatient() {
     if (typeof window !== 'undefined') {
       sessionStorage.removeItem(CURRENT_PATIENT_KEY);
+      sessionStorage.removeItem('caseflow_patient_lang');
+    }
+  },
+
+  getPatientLanguage(patientId = null) {
+    if (typeof window !== 'undefined') {
+      const storedLang = sessionStorage.getItem('caseflow_patient_lang');
+      if (storedLang) return storedLang;
+    }
+    const targetId = patientId || this.getCurrentPatientId();
+    if (targetId && clientFallbackPatients[targetId]?.language) {
+      const l = clientFallbackPatients[targetId].language.toLowerCase();
+      if (l.includes('hi')) return 'hi';
+      if (l.includes('en')) return 'en';
+    }
+    return 'en';
+  },
+
+  setPatientLanguage(language, patientId = null) {
+    const cleaned = language === 'hi' || language === 'hindi' ? 'hi' : 'en';
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('caseflow_patient_lang', cleaned);
+    }
+    const targetId = patientId || this.getCurrentPatientId();
+    if (targetId && clientFallbackPatients[targetId]) {
+      clientFallbackPatients[targetId].language = cleaned === 'hi' ? 'Hindi' : 'English';
     }
   },
 
@@ -728,7 +754,7 @@ export const patientService = {
   /**
    * Synchronize patient interview responses and clinical extractions to the patient record
    */
-  async syncInterviewData(patientId, { chiefComplaint, extractedHistory = {}, redFlags = [], sessionCompleted = false }) {
+  async syncInterviewData(patientId, { chiefComplaint, extractedHistory = {}, redFlags = [], sessionCompleted = false, language = null }) {
     if (!patientId) return null;
 
     // 1. Synchronize to backend if accessible
@@ -736,6 +762,7 @@ export const patientService = {
       const updatePayload = {};
       if (chiefComplaint) updatePayload.chief_complaint = chiefComplaint;
       if (sessionCompleted) updatePayload.intake_status = 'Completed';
+      if (language) updatePayload.language = language;
 
       await fetch(`${API_BASE_URL}/${patientId}`, {
         method: 'PUT',
@@ -749,6 +776,7 @@ export const patientService = {
     // 2. Synchronize to client fallback store
     let p = clientFallbackPatients[patientId];
     if (!p) {
+      const langDisplay = language === 'hi' ? 'Hindi' : (language === 'en' ? 'English' : (language || 'Hindi / English'));
       p = {
         id: patientId,
         queue_token: `OPD-${104 + Object.keys(clientFallbackPatients).length}`,
@@ -761,7 +789,7 @@ export const patientService = {
         intake_status: sessionCompleted ? 'Completed' : 'Interview in progress',
         red_flag_detected: false,
         red_flag_note: null,
-        language: 'Hindi',
+        language: langDisplay,
         arrived_at: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         verification_status: 'Pending Review',
         demographics: {
@@ -777,6 +805,10 @@ export const patientService = {
         documents: []
       };
       clientFallbackPatients[patientId] = p;
+    }
+
+    if (language) {
+      p.language = language === 'hi' ? 'Hindi' : (language === 'en' ? 'English' : language);
     }
 
     // Update chief complaint

@@ -624,27 +624,27 @@ export function classifySymptomIntent(text) {
   const t = String(text).toLowerCase();
 
   // 1. Bleeding / Hemorrhage symptoms
-  if (['bleed', 'blood', 'khoon', 'hemorrhage', 'spotting', 'hematuria', 'intimate', 'discharge', 'cut', 'wound'].some((k) => t.includes(k))) {
+  if (['खून', 'रक्त', 'bleed', 'blood', 'khoon', 'hemorrhage', 'spotting', 'hematuria', 'intimate', 'discharge', 'cut', 'wound'].some((k) => t.includes(k))) {
     return 'bleeding_onset';
   }
   // 2. Chest discomfort / Cardiac
-  if (['chest', 'seena', 'heart', 'angina', 'retrosternal', 'palpitation', 'crushing'].some((k) => t.includes(k))) {
+  if (['छाती', 'सीना', 'दिल', 'chest', 'seena', 'heart', 'angina', 'retrosternal', 'palpitation', 'crushing'].some((k) => t.includes(k))) {
     return 'chest_character';
   }
   // 3. Respiratory / Cough
-  if (['cough', 'khansi', 'sputum', 'balgam', 'phlegm', 'wheez', 'saans', 'breathless'].some((k) => t.includes(k))) {
+  if (['खांसी', 'खराश', 'बलगम', 'cough', 'khansi', 'sputum', 'balgam', 'phlegm', 'wheez', 'saans', 'breathless'].some((k) => t.includes(k))) {
     return 'cough_type';
   }
   // 4. Fever / Systemic chills
-  if (['fever', 'bukhar', 'chill', 'shiver', 'thand', 'temperature', 'tap'].some((k) => t.includes(k))) {
+  if (['बुखार', 'ठंड', 'ताप', 'fever', 'bukhar', 'chill', 'shiver', 'thand', 'temperature', 'tap'].some((k) => t.includes(k))) {
     return 'fever_pattern';
   }
   // 5. Headache / Neurological
-  if (['headache', 'sir dard', 'sar dard', 'migrain', 'head pain', 'sir me dard', 'sar me dard'].some((k) => t.includes(k))) {
+  if (['सिरदर्द', 'सिर में दर्द', 'सरदर्द', 'सर में दर्द', 'सिर दर्द', 'सर दर्द', 'headache', 'sir dard', 'sar dard', 'migrain', 'head pain', 'sir me dard', 'sar me dard'].some((k) => t.includes(k))) {
     return 'headache_type';
   }
   // 6. Abdominal / GI pain symptoms (SOCRATES)
-  if (['stomach', 'abdominal', 'abdomen', 'pet', 'dard', 'belly', 'cramp', 'gastric', 'acid', 'burning', 'colic', 'pain'].some((k) => t.includes(k))) {
+  if (['पेट में दर्द', 'पेट दर्द', 'पेट', 'stomach', 'abdominal', 'abdomen', 'pet', 'belly', 'cramp', 'gastric', 'acid', 'burning', 'colic', 'pain', 'dard'].some((k) => t.includes(k))) {
     return 'abdo_site';
   }
   // 7. Safe generic clarification pathway for all other unknown complaints
