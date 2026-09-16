@@ -6,6 +6,8 @@ Manages patient registration, demographic updates, OPD queue ordering,
 and patient clinical records with strict patient-specific isolation.
 """
 
+import re
+import uuid
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 from datetime import datetime
@@ -43,6 +45,15 @@ class BasePatientService(ABC):
         doctor_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """Updates review status (verified, edited, rejected) with doctor feedback."""
+        pass
+
+    @abstractmethod
+    def merge_document_extraction(
+        self,
+        patient_id: str,
+        document_data: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        """Merges confirmed OCR-extracted medications, lab findings, and timeline events."""
         pass
 
 
@@ -483,19 +494,26 @@ class StatefulPatientService(BasePatientService):
                 },
                 "past_medical_history": [],
                 "current_medications": [],
+                "labs": [],
                 "allergies": [],
                 "family_history": [],
                 "personal_social": {},
                 "review_of_systems": {}
             },
+            "medications": [],
+            "labs": [],
             "timeline": [
                 {
+                    "id": f"TL-REG-{new_id}",
+                    "patient_id": new_id,
+                    "type": "patient_registered",
                     "date": datetime.now().strftime("%d %b %Y"),
                     "time": now_time,
-                    "title": "CaseFlow Kiosk Registration",
+                    "timestamp": datetime.now().isoformat(),
+                    "title": "Patient registered",
                     "category": "Intake",
                     "description": f"Patient registered at kiosk. Reason: {complaint}",
-                    "source": "patient-reported"
+                    "source": "registration"
                 }
             ]
         }
@@ -670,6 +688,21 @@ class StatefulPatientService(BasePatientService):
 
         if session_completed:
             patient["intake_status"] = "Completed"
+            existing_event_titles = [ev.get("title", "").lower() for ev in patient.get("timeline", [])]
+            if "interview completed" not in existing_event_titles:
+                now_dt = datetime.now()
+                patient.setdefault("timeline", []).append({
+                    "id": f"TL-INT-{patient_id}",
+                    "patient_id": patient_id,
+                    "type": "interview_completed",
+                    "category": "Intake",
+                    "title": "Interview completed",
+                    "description": f"Pre-consultation adaptive interview completed. Reason: {patient.get('chief_complaint', 'General consultation')}",
+                    "timestamp": now_dt.isoformat(),
+                    "date": now_dt.strftime("%d %b %Y"),
+                    "time": now_dt.strftime("%I:%M %p"),
+                    "source": "interview"
+                })
 
     async def get_patient_by_id(self, patient_id: str) -> Optional[Dict[str, Any]]:
         """
@@ -682,6 +715,18 @@ class StatefulPatientService(BasePatientService):
 
         # Return a copy to prevent accidental external mutation
         record = dict(patient)
+        if "structured_history" in record and isinstance(record["structured_history"], dict):
+            sh = dict(record["structured_history"])
+            if "labs" not in sh:
+                sh["labs"] = []
+            if "current_medications" not in sh:
+                sh["current_medications"] = []
+            record["structured_history"] = sh
+            record["medications"] = sh.get("current_medications", [])
+            record["labs"] = sh.get("labs", [])
+        else:
+            record["medications"] = []
+            record["labs"] = []
 
         # Dynamic documents linkage from document_service (strictly isolated by patient_id)
         try:
@@ -725,6 +770,24 @@ class StatefulPatientService(BasePatientService):
                 patient["structured_history"]["hpi"]["character"] = comp
             patient["ai_clinical_summary"] = self.generate_patient_clinical_summary(patient=patient)
 
+        # Ensure interview completed event in timeline if intake is completed
+        if update_data.get("intake_status") == "Completed":
+            existing_event_titles = [ev.get("title", "").lower() for ev in patient.get("timeline", [])]
+            if not any("interview completed" in t for t in existing_event_titles):
+                now_dt = datetime.now()
+                patient.setdefault("timeline", []).append({
+                    "id": f"TL-INT-{patient_id}",
+                    "patient_id": patient_id,
+                    "type": "interview_completed",
+                    "category": "Intake",
+                    "title": "Interview completed",
+                    "description": f"Pre-consultation intake completed. Reason: {patient.get('chief_complaint', 'General consultation')}",
+                    "timestamp": now_dt.isoformat(),
+                    "date": now_dt.strftime("%d %b %Y"),
+                    "time": now_dt.strftime("%I:%M %p"),
+                    "source": "interview"
+                })
+
         return patient
 
     async def get_opd_queue(self, department: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -766,6 +829,181 @@ class StatefulPatientService(BasePatientService):
             patient["verified_by"] = doctor_id or "Dr. S. K. Mehta (Reg: MCI-48201)"
             return patient
         return {"error": "Patient not found"}
+
+    def merge_document_extraction(
+        self,
+        patient_id: str,
+        document_data: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Merges confirmed OCR-extracted medications and lab findings into the canonical patient record.
+        Strictly isolates by patient_id: never falls back or alters other patients.
+        Applies case-insensitive duplicate normalization for medications and lab parameters,
+        preserves provenance (source='ocr'), and adds a timeline event.
+        """
+        patient = self._patients.get(patient_id)
+        if not patient:
+            return None
+
+        # Ensure structured_history exists
+        if "structured_history" not in patient or not isinstance(patient["structured_history"], dict):
+            patient["structured_history"] = {}
+        sh = patient["structured_history"]
+
+        if "current_medications" not in sh or not isinstance(sh["current_medications"], list):
+            sh["current_medications"] = []
+
+        if "labs" not in sh or not isinstance(sh["labs"], list):
+            sh["labs"] = []
+
+        # 1. Medications Merge with duplicate normalization
+        extracted_meds = (
+            document_data.get("medications")
+            or document_data.get("extracted_data", {}).get("medications")
+            or []
+        )
+
+        for raw_med in extracted_meds:
+            if not isinstance(raw_med, dict):
+                continue
+            raw_name = (raw_med.get("name") or "").strip()
+            if not raw_name:
+                continue
+
+            dose = raw_med.get("dose") or raw_med.get("dosage") or ""
+            frequency = raw_med.get("frequency") or ""
+            duration = raw_med.get("duration") or ""
+            source = raw_med.get("source") or "ocr"
+
+            norm_name = self._normalize_med_name(raw_name)
+
+            # Check for existing duplicate entry in current_medications
+            match_found = False
+            for existing in sh["current_medications"]:
+                existing_norm = self._normalize_med_name(existing.get("name", ""))
+                if norm_name == existing_norm:
+                    match_found = True
+                    # Preserve the more detailed information
+                    if dose and (not existing.get("dose") or existing.get("dose") == "Standard dose"):
+                        existing["dose"] = dose
+                    if frequency and not existing.get("frequency"):
+                        existing["frequency"] = frequency
+                    if duration and not existing.get("duration"):
+                        existing["duration"] = duration
+                    # If existing had fewer details, retain OCR source attribution
+                    if not existing.get("source") or existing.get("source") == "patient-reported":
+                        existing["source"] = source
+                    break
+
+            if not match_found:
+                # Clean medication name by stripping dosage suffix if included in name
+                clean_name = re.sub(r'^(?:tab(?:\.|\b)|cap(?:\.|\b)|syp(?:\.|\b)|inj(?:\.|\b))\s*', '', raw_name, flags=re.IGNORECASE).strip()
+                new_med = {
+                    "name": clean_name,
+                    "dose": dose,
+                    "frequency": frequency,
+                    "duration": duration,
+                    "source": source
+                }
+                if raw_med.get("instructions"):
+                    new_med["instructions"] = raw_med["instructions"]
+                sh["current_medications"].append(new_med)
+
+        # 2. Labs Merge into structured history
+        extracted_labs = (
+            document_data.get("lab_findings")
+            or document_data.get("extracted_data", {}).get("labs")
+            or document_data.get("labs")
+            or []
+        )
+
+        for raw_lab in extracted_labs:
+            if not isinstance(raw_lab, dict):
+                continue
+            param = (raw_lab.get("parameter") or raw_lab.get("name") or "").strip()
+            if not param:
+                continue
+            val = str(raw_lab.get("value", "")).strip()
+            unit = raw_lab.get("unit") or ""
+            status = raw_lab.get("status") or "Normal"
+            ref_range = raw_lab.get("reference_range") or ""
+            source = raw_lab.get("source") or "ocr"
+
+            norm_param = re.sub(r'[^a-zA-Z0-9]', '', param).lower()
+
+            match_found = False
+            for existing_lab in sh["labs"]:
+                ex_param = (existing_lab.get("parameter") or existing_lab.get("name") or "").strip()
+                ex_norm = re.sub(r'[^a-zA-Z0-9]', '', ex_param).lower()
+                if norm_param == ex_norm:
+                    match_found = True
+                    existing_lab["value"] = val
+                    if unit:
+                        existing_lab["unit"] = unit
+                    if status:
+                        existing_lab["status"] = status
+                    if ref_range:
+                        existing_lab["reference_range"] = ref_range
+                    existing_lab["source"] = source
+                    break
+
+            if not match_found:
+                sh["labs"].append({
+                    "name": param,
+                    "parameter": param,
+                    "value": val,
+                    "unit": unit,
+                    "status": status,
+                    "reference_range": ref_range,
+                    "source": source
+                })
+
+        # Expose top-level mirrors for convenience
+        patient["medications"] = sh["current_medications"]
+        patient["labs"] = sh["labs"]
+
+        # 3. Add timeline event for this confirmed document
+        doc_id = document_data.get("document_id") or f"DOC-{uuid.uuid4().hex[:6].upper()}"
+        doc_type = (document_data.get("document_type") or "prescription").lower()
+        is_lab = "lab" in doc_type or "cbc" in doc_type
+
+        timeline_event_id = f"TL-{doc_id}"
+        existing_timeline_ids = [ev.get("id") for ev in patient.get("timeline", [])]
+        if timeline_event_id not in existing_timeline_ids:
+            title = "Lab report uploaded" if is_lab else "Prescription uploaded"
+            desc = "Lab report processed and confirmed" if is_lab else "Prescription document processed and confirmed"
+            now_dt = datetime.now()
+            timeline_ev = {
+                "id": timeline_event_id,
+                "patient_id": patient_id,
+                "type": "document_uploaded",
+                "category": "Lab Investigation" if is_lab else "Prescription",
+                "title": title,
+                "description": desc,
+                "timestamp": now_dt.isoformat(),
+                "date": now_dt.strftime("%d %b %Y"),
+                "time": now_dt.strftime("%I:%M %p"),
+                "source": "document"
+            }
+            if "timeline" not in patient or not isinstance(patient["timeline"], list):
+                patient["timeline"] = []
+            patient["timeline"].append(timeline_ev)
+
+        # 4. Refresh patient clinical summary
+        patient["ai_clinical_summary"] = self.generate_patient_clinical_summary(
+            patient=patient
+        )
+
+        return patient
+
+    @staticmethod
+    def _normalize_med_name(name: str) -> str:
+        """Helper to normalize medication name for case-insensitive duplicate detection."""
+        # Strip prefixes like Tab., Cap., Syp., Inj.
+        cleaned = re.sub(r'^(?:tab(?:\.|\b)|cap(?:\.|\b)|syp(?:\.|\b)|inj(?:\.|\b))\s*', '', name.strip(), flags=re.IGNORECASE)
+        # Strip dosage like 500mg, 500 mg, 40 mg, etc.
+        cleaned = re.sub(r'\s*\d+(?:\.\d+)?\s*(?:mg|g|ml|mcg|iu)\b.*$', '', cleaned, flags=re.IGNORECASE)
+        return re.sub(r'\s+', ' ', cleaned).strip().lower()
 
 
 # Global singleton patient service instance

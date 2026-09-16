@@ -1,5 +1,5 @@
 from .patient import PatientBase, PatientCreate, PatientQueueItem, VerificationUpdate, PatientUpdate
-from .clinical_history import StructuredClinicalHistory, TimelineEvent, MedicationItem, AllergyItem, RedFlagItem
+from .clinical_history import StructuredClinicalHistory, TimelineEvent, MedicationItem, LabResultItem, AllergyItem, RedFlagItem
 from .interview import QuestionResponse, PatientAnswer, InterviewSession
 from .document import (
     ExtractedMedication,
@@ -18,6 +18,7 @@ __all__ = [
     "StructuredClinicalHistory",
     "TimelineEvent",
     "MedicationItem",
+    "LabResultItem",
     "AllergyItem",
     "RedFlagItem",
     "QuestionResponse",

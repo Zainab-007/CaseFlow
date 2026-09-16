@@ -66,3 +66,12 @@ async def verify_patient_record(patient_id: str, update: VerificationUpdate):
         notes=update.notes,
         doctor_id=update.doctor_id
     )
+
+
+@router.get("/{patient_id}/timeline")
+async def get_patient_timeline(patient_id: str):
+    """Retrieve chronological clinical timeline events for a specific patient."""
+    patient = await patient_service.get_patient_by_id(patient_id)
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+    return patient.get("timeline", [])

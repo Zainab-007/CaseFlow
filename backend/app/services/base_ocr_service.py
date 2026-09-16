@@ -135,13 +135,20 @@ class ModularClinicalOCRService(BaseOCRService):
             "date_detected": detected_date,
             "confidence_score": confidence,
             "processing_status": "extracted",
+            "status": "extracted",
             "confirmed": False,
             "raw_text": raw_text,
             "medications": medications,
             "lab_findings": lab_findings,
             "diagnoses": diagnoses,
             "timeline_metadata": timeline_meta,
-            "upload_timestamp": datetime.now().isoformat()
+            "upload_timestamp": datetime.now().isoformat(),
+            "uploaded_at": datetime.now().isoformat(),
+            "source": "ocr",
+            "extracted_data": {
+                "medications": medications,
+                "labs": lab_findings
+            }
         }
 
     def _classify_document(self, file_name: str, text: str) -> Tuple[str, str]:
@@ -189,7 +196,8 @@ class ModularClinicalOCRService(BaseOCRService):
                     "dose": dose,
                     "frequency": freq,
                     "instructions": "After meals",
-                    "confidence": 0.94
+                    "confidence": 0.94,
+                    "source": "ocr"
                 })
 
         # Check known drug list
@@ -204,14 +212,15 @@ class ModularClinicalOCRService(BaseOCRService):
                     "dose": dose,
                     "frequency": "Once daily",
                     "instructions": "Oral administration",
-                    "confidence": 0.91
+                    "confidence": 0.91,
+                    "source": "ocr"
                 })
 
         # Fallback if file implies prescription
         if not meds and ("presc" in file_name.lower() or "rx" in file_name.lower() or "slip" in file_name.lower()):
             meds = [
-                {"name": "Telmisartan", "dose": "40 mg", "frequency": "Once daily (OD)", "instructions": "Morning after breakfast", "confidence": 0.93},
-                {"name": "Metformin", "dose": "500 mg", "frequency": "Twice daily (BD)", "instructions": "After lunch and dinner", "confidence": 0.91}
+                {"name": "Telmisartan", "dose": "40 mg", "frequency": "Once daily (OD)", "instructions": "Morning after breakfast", "confidence": 0.93, "source": "ocr"},
+                {"name": "Metformin", "dose": "500 mg", "frequency": "Twice daily (BD)", "instructions": "After lunch and dinner", "confidence": 0.91, "source": "ocr"}
             ]
 
         return meds
@@ -225,12 +234,14 @@ class ModularClinicalOCRService(BaseOCRService):
             val = float(hb_match.group(1))
             status = "Normal" if 12.0 <= val <= 17.5 else ("Low" if val < 12.0 else "Elevated")
             findings.append({
+                "name": "Hemoglobin (Hb)",
                 "parameter": "Hemoglobin (Hb)",
                 "value": str(val),
                 "unit": "g/dL",
                 "status": status,
                 "reference_range": "12.0 - 16.0 g/dL",
-                "confidence": 0.96
+                "confidence": 0.96,
+                "source": "ocr"
             })
 
         # HbA1c
@@ -239,12 +250,14 @@ class ModularClinicalOCRService(BaseOCRService):
             val = float(hba1c_match.group(1))
             status = "Normal" if val < 5.7 else ("Elevated" if val >= 6.5 else "Borderline")
             findings.append({
+                "name": "Glycated Hemoglobin (HbA1c)",
                 "parameter": "Glycated Hemoglobin (HbA1c)",
                 "value": str(val),
                 "unit": "%",
                 "status": status,
                 "reference_range": "< 5.7 %",
-                "confidence": 0.95
+                "confidence": 0.95,
+                "source": "ocr"
             })
 
         # Platelets
@@ -252,12 +265,14 @@ class ModularClinicalOCRService(BaseOCRService):
         if plt_match:
             val_str = plt_match.group(1).replace(",", "")
             findings.append({
+                "name": "Platelet Count",
                 "parameter": "Platelet Count",
                 "value": val_str,
                 "unit": "/uL",
                 "status": "Normal",
                 "reference_range": "150,000 - 450,000 /uL",
-                "confidence": 0.93
+                "confidence": 0.93,
+                "source": "ocr"
             })
 
         # Fasting Glucose
@@ -266,12 +281,14 @@ class ModularClinicalOCRService(BaseOCRService):
             val = int(bs_match.group(1))
             status = "Normal" if 70 <= val <= 100 else ("Elevated" if val > 100 else "Low")
             findings.append({
+                "name": "Fasting Blood Glucose",
                 "parameter": "Fasting Blood Glucose",
                 "value": str(val),
                 "unit": "mg/dL",
                 "status": status,
                 "reference_range": "70 - 100 mg/dL",
-                "confidence": 0.92
+                "confidence": 0.92,
+                "source": "ocr"
             })
 
         # Serum Creatinine
@@ -280,20 +297,22 @@ class ModularClinicalOCRService(BaseOCRService):
             val = float(creat_match.group(1))
             status = "Normal" if 0.6 <= val <= 1.2 else "Elevated"
             findings.append({
+                "name": "Serum Creatinine",
                 "parameter": "Serum Creatinine",
                 "value": str(val),
                 "unit": "mg/dL",
                 "status": status,
                 "reference_range": "0.6 - 1.2 mg/dL",
-                "confidence": 0.94
+                "confidence": 0.94,
+                "source": "ocr"
             })
 
         # Fallback if document name indicates lab
         if not findings and ("cbc" in file_name.lower() or "lab" in file_name.lower() or "blood" in file_name.lower()):
             findings = [
-                {"parameter": "Hemoglobin (Hb)", "value": "11.2", "unit": "g/dL", "status": "Low", "reference_range": "12.0 - 16.0 g/dL", "confidence": 0.95},
-                {"parameter": "Glycated Hemoglobin (HbA1c)", "value": "7.4", "unit": "%", "status": "Elevated", "reference_range": "< 5.7 %", "confidence": 0.94},
-                {"parameter": "Platelet Count", "value": "220,000", "unit": "/uL", "status": "Normal", "reference_range": "150,000 - 450,000 /uL", "confidence": 0.92}
+                {"name": "Hemoglobin (Hb)", "parameter": "Hemoglobin (Hb)", "value": "11.2", "unit": "g/dL", "status": "Low", "reference_range": "12.0 - 16.0 g/dL", "confidence": 0.95, "source": "ocr"},
+                {"name": "Glycated Hemoglobin (HbA1c)", "parameter": "Glycated Hemoglobin (HbA1c)", "value": "7.4", "unit": "%", "status": "Elevated", "reference_range": "< 5.7 %", "confidence": 0.94, "source": "ocr"},
+                {"name": "Platelet Count", "parameter": "Platelet Count", "value": "220,000", "unit": "/uL", "status": "Normal", "reference_range": "150,000 - 450,000 /uL", "confidence": 0.92, "source": "ocr"}
             ]
 
         return findings

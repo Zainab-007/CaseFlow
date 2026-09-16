@@ -414,7 +414,9 @@ export const patientService = {
     try {
       const res = await fetch(`${API_BASE_URL}/${targetId}`);
       if (res.ok) {
-        return await res.json();
+        const patientData = await res.json();
+        clientFallbackPatients[targetId] = patientData;
+        return patientData;
       }
     } catch (err) {
       console.warn(`Backend patient fetch for ${targetId} failed, using client fallback:`, err.message);
@@ -444,46 +446,98 @@ export const patientService = {
         body: JSON.stringify(updateData)
       });
       if (res.ok) {
-        return await res.json();
+        const updated = await res.json();
+        clientFallbackPatients[targetId] = updated;
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('caseflow-queue-updated'));
+        }
+        return updated;
       }
     } catch (err) {
       console.warn(`Backend patient update for ${targetId} failed, using client fallback:`, err.message);
     }
 
     // Client fallback update
-    const p = clientFallbackPatients[targetId];
-    if (p) {
-      if (updateData.name) {
-        p.name = updateData.name;
-        if (p.demographics) p.demographics.name = updateData.name;
-      }
-      if (updateData.age) {
-        p.age = Number(updateData.age);
-        if (p.demographics) p.demographics.age = Number(updateData.age);
-      }
-      if (updateData.gender) {
-        p.gender = updateData.gender;
-        if (p.demographics) p.demographics.gender = updateData.gender;
-      }
-      if (updateData.phone) {
-        p.phone = updateData.phone;
-        if (p.demographics) p.demographics.contact = updateData.phone;
-      }
-      if (updateData.abha_id) {
-        p.abha_id = updateData.abha_id;
-        if (p.demographics) p.demographics.abha_id = updateData.abha_id;
-      }
-      if (updateData.chief_complaint) {
-        p.chief_complaint = updateData.chief_complaint;
-        if (p.structured_history?.hpi) p.structured_history.hpi.character = updateData.chief_complaint;
-        p.ai_clinical_summary = this.generateClientClinicalSummary(p);
-      }
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('caseflow-queue-updated'));
-      }
-      return p;
+    let p = clientFallbackPatients[targetId];
+    if (!p) {
+      p = {
+        id: targetId,
+        queue_token: `OPD-${104 + Object.keys(clientFallbackPatients).length}`,
+        name: updateData.name || 'Patient',
+        age: Number(updateData.age) || 30,
+        gender: updateData.gender || 'Other',
+        phone: updateData.phone || '+91 99000 00000',
+        abha_id: updateData.abha_id || 'Not linked',
+        department: 'General Medicine',
+        triage_priority: 'Routine',
+        chief_complaint: updateData.chief_complaint || 'Routine intake',
+        intake_status: updateData.intake_status || 'Registered',
+        verification_status: 'Pending Review',
+        demographics: {
+          name: updateData.name || 'Patient',
+          age: Number(updateData.age) || 30,
+          gender: updateData.gender || 'Other'
+        },
+        triage: { priority: 'Routine', vitals_summary: 'Pending triage' },
+        structured_history: { hpi: {}, past_medical_history: [], current_medications: [], labs: [], allergies: [] },
+        medications: [],
+        labs: [],
+        timeline: [],
+        documents: []
+      };
+      clientFallbackPatients[targetId] = p;
     }
-    return null;
+
+    if (updateData.name) {
+      p.name = updateData.name;
+      if (p.demographics) p.demographics.name = updateData.name;
+    }
+    if (updateData.age) {
+      p.age = Number(updateData.age);
+      if (p.demographics) p.demographics.age = Number(updateData.age);
+    }
+    if (updateData.gender) {
+      p.gender = updateData.gender;
+      if (p.demographics) p.demographics.gender = updateData.gender;
+    }
+    if (updateData.phone) {
+      p.phone = updateData.phone;
+      if (p.demographics) p.demographics.contact = updateData.phone;
+    }
+    if (updateData.abha_id) {
+      p.abha_id = updateData.abha_id;
+      if (p.demographics) p.demographics.abha_id = updateData.abha_id;
+    }
+    if (updateData.chief_complaint) {
+      p.chief_complaint = updateData.chief_complaint;
+      if (p.structured_history?.hpi) p.structured_history.hpi.character = updateData.chief_complaint;
+      p.ai_clinical_summary = this.generateClientClinicalSummary(p);
+    }
+    if (updateData.intake_status) {
+      p.intake_status = updateData.intake_status;
+      if (updateData.intake_status === 'Completed') {
+        if (!p.timeline) p.timeline = [];
+        const hasInterview = p.timeline.some(e => e.title?.toLowerCase().includes('interview'));
+        if (!hasInterview) {
+          p.timeline.push({
+            id: `TL-INT-${targetId}`,
+            patient_id: targetId,
+            type: 'interview_completed',
+            category: 'Intake',
+            title: 'Interview completed',
+            description: `Pre-consultation intake completed. Reason: ${p.chief_complaint || 'General intake'}`,
+            timestamp: new Date().toISOString(),
+            date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            source: 'interview'
+          });
+        }
+      }
+    }
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('caseflow-queue-updated'));
+    }
+    return p;
   },
 
   /**
@@ -499,6 +553,7 @@ export const patientService = {
       if (res.ok) {
         const created = await res.json();
         this.setCurrentPatientId(created.id);
+        clientFallbackPatients[created.id] = created;
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('caseflow-queue-updated'));
         }
@@ -568,19 +623,26 @@ export const patientService = {
         },
         past_medical_history: [],
         current_medications: [],
+        labs: [],
         allergies: [],
         family_history: [],
         personal_social: {},
         review_of_systems: {}
       },
+      medications: [],
+      labs: [],
       timeline: [
         {
+          id: `TL-REG-${newId}`,
+          patient_id: newId,
+          type: 'patient_registered',
           date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
           time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          title: 'CaseFlow Kiosk Registration',
+          timestamp: new Date().toISOString(),
+          title: 'Patient registered',
           category: 'Intake',
           description: `Patient registered at kiosk. Reason: ${patientData.chief_complaint || 'Routine intake'}`,
-          source: 'patient-reported'
+          source: 'registration'
         }
       ],
       documents: []
@@ -636,7 +698,9 @@ export const patientService = {
           gender: 'Other'
         },
         triage: { priority: 'Routine', vitals_summary: 'Pending triage' },
-        structured_history: { hpi: {}, past_medical_history: [], current_medications: [], allergies: [] },
+        structured_history: { hpi: {}, past_medical_history: [], current_medications: [], labs: [], allergies: [] },
+        medications: [],
+        labs: [],
         timeline: [],
         documents: []
       };
@@ -687,8 +751,168 @@ export const patientService = {
 
     if (sessionCompleted) {
       p.intake_status = 'Completed';
+      if (!p.timeline) p.timeline = [];
+      const hasInterviewEvent = p.timeline.some(e => e.title?.toLowerCase().includes('interview'));
+      if (!hasInterviewEvent) {
+        p.timeline.push({
+          id: `TL-INT-${patientId}`,
+          patient_id: patientId,
+          type: 'interview_completed',
+          date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          timestamp: new Date().toISOString(),
+          title: 'Interview completed',
+          category: 'Intake',
+          description: `Pre-consultation adaptive interview completed. Reason: ${p.chief_complaint || 'General consultation'}`,
+          source: 'interview'
+        });
+      }
     }
 
+    return p;
+  },
+
+  /**
+   * Merges confirmed document extractions (medications, labs, timeline) into canonical patient record
+   */
+  mergeConfirmedDocumentData(patientId, documentData) {
+    if (!patientId || !documentData) return null;
+    let p = clientFallbackPatients[patientId];
+    if (!p) {
+      p = {
+        id: patientId,
+        queue_token: `OPD-${104 + Object.keys(clientFallbackPatients).length}`,
+        name: 'Patient',
+        age: 30,
+        gender: 'Other',
+        department: 'General Medicine',
+        triage_priority: 'Routine',
+        chief_complaint: 'Routine medical intake',
+        intake_status: 'Completed',
+        verification_status: 'Pending Review',
+        demographics: { name: 'Patient', age: 30, gender: 'Other' },
+        structured_history: { current_medications: [], labs: [], past_medical_history: [], hpi: {} },
+        medications: [],
+        labs: [],
+        timeline: [
+          {
+            id: `TL-REG-${patientId}`,
+            patient_id: patientId,
+            type: 'patient_registered',
+            category: 'Intake',
+            title: 'Patient registered',
+            description: 'Patient registered at kiosk',
+            timestamp: new Date().toISOString(),
+            date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            source: 'registration'
+          },
+          {
+            id: `TL-INT-${patientId}`,
+            patient_id: patientId,
+            type: 'interview_completed',
+            category: 'Intake',
+            title: 'Interview completed',
+            description: 'Pre-consultation adaptive interview completed',
+            timestamp: new Date().toISOString(),
+            date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            source: 'interview'
+          }
+        ]
+      };
+      clientFallbackPatients[patientId] = p;
+    }
+
+    if (!p.structured_history) p.structured_history = {};
+    if (!p.structured_history.current_medications) p.structured_history.current_medications = [];
+    if (!p.structured_history.labs) p.structured_history.labs = [];
+    if (!p.timeline) p.timeline = [];
+
+    const normalizeMed = (name) => (name || '')
+      .toLowerCase()
+      .replace(/^(tab\.|cap\.|syp\.|inj\.)\s*/i, '')
+      .replace(/\s*\d+(\.\d+)?\s*(mg|g|ml|mcg)\b.*$/i, '')
+      .trim();
+
+    // 1. Merge medications
+    const meds = documentData.medications || documentData.extracted_data?.medications || [];
+    meds.forEach(rawMed => {
+      if (!rawMed || !rawMed.name) return;
+      const norm = normalizeMed(rawMed.name);
+      const existing = p.structured_history.current_medications.find(m => normalizeMed(m.name) === norm);
+      if (existing) {
+        if (rawMed.dose && !existing.dose) existing.dose = rawMed.dose;
+        if (rawMed.frequency && !existing.frequency) existing.frequency = rawMed.frequency;
+        if (rawMed.duration && !existing.duration) existing.duration = rawMed.duration;
+        if (!existing.source || existing.source === 'patient-reported') existing.source = rawMed.source || 'ocr';
+      } else {
+        const cleanName = (rawMed.name || '').replace(/^(tab\.|cap\.|syp\.|inj\.)\s*/i, '').trim();
+        p.structured_history.current_medications.push({
+          name: cleanName,
+          dose: rawMed.dose || '',
+          frequency: rawMed.frequency || '',
+          duration: rawMed.duration || '',
+          source: rawMed.source || 'ocr'
+        });
+      }
+    });
+
+    // 2. Merge labs
+    const labs = documentData.lab_findings || documentData.extracted_data?.labs || documentData.labs || [];
+    labs.forEach(rawLab => {
+      if (!rawLab) return;
+      const param = (rawLab.parameter || rawLab.name || '').trim();
+      if (!param) return;
+      const normParam = param.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const existingLab = p.structured_history.labs.find(l => (l.parameter || l.name || '').toLowerCase().replace(/[^a-z0-9]/g, '') === normParam);
+      if (existingLab) {
+        existingLab.value = String(rawLab.value || '');
+        if (rawLab.unit) existingLab.unit = rawLab.unit;
+        if (rawLab.status) existingLab.status = rawLab.status;
+        if (rawLab.reference_range) existingLab.reference_range = rawLab.reference_range;
+        existingLab.source = rawLab.source || 'ocr';
+      } else {
+        p.structured_history.labs.push({
+          name: param,
+          parameter: param,
+          value: String(rawLab.value || ''),
+          unit: rawLab.unit || '',
+          status: rawLab.status || 'Normal',
+          reference_range: rawLab.reference_range || '',
+          source: rawLab.source || 'ocr'
+        });
+      }
+    });
+
+    p.medications = p.structured_history.current_medications;
+    p.labs = p.structured_history.labs;
+
+    // 3. Add timeline event
+    const docId = documentData.document_id || 'DOC';
+    const timelineEventId = `TL-${docId}`;
+    const docType = (documentData.document_type || 'prescription').toLowerCase();
+    const isLab = docType.includes('lab') || docType.includes('cbc');
+
+    if (!p.timeline.some(e => e.id === timelineEventId)) {
+      p.timeline.push({
+        id: timelineEventId,
+        patient_id: patientId,
+        type: 'document_uploaded',
+        category: isLab ? 'Lab Investigation' : 'Prescription',
+        title: isLab ? 'Lab report uploaded' : 'Prescription uploaded',
+        description: isLab ? 'Lab report processed and confirmed' : 'Prescription document processed and confirmed',
+        timestamp: new Date().toISOString(),
+        date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        source: 'document'
+      });
+    }
+
+    p.ai_clinical_summary = this.generateClientClinicalSummary(p);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('caseflow-queue-updated'));
+    }
     return p;
   },
 

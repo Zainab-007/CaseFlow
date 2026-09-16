@@ -1,6 +1,6 @@
 import React from 'react';
 import Badge from '../ui/Badge';
-import { Calendar, FileText, Activity, Stethoscope, Clock } from 'lucide-react';
+import { Calendar, FileText, Activity, Stethoscope, Clock, Pill } from 'lucide-react';
 
 /**
  * Chronological Clinical Timeline component.
@@ -12,7 +12,11 @@ export default function ClinicalTimeline({ events = [] }) {
       case 'intake':
         return Activity;
       case 'lab investigation':
+      case 'lab':
         return FileText;
+      case 'prescription':
+      case 'medication':
+        return Pill;
       case 'radiology':
         return Activity;
       case 'consultation':
@@ -23,8 +27,9 @@ export default function ClinicalTimeline({ events = [] }) {
   };
 
   const getSourceVariant = (source) => {
-    if (source === 'patient-reported') return 'source-patient';
-    if (source === 'document-extracted') return 'source-doc';
+    if (source === 'patient-reported' || source === 'interview' || source === 'registration') return 'source-patient';
+    if (source === 'document-extracted' || source === 'document' || source === 'ocr') return 'source-doc';
+    if (source === 'doctor') return 'verified';
     return 'default';
   };
 

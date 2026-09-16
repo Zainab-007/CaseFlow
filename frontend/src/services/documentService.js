@@ -6,6 +6,8 @@
  * client-side fallback state machine for offline or standalone operation.
  */
 
+import { patientService } from './patientService';
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
   ? `${import.meta.env.VITE_API_BASE_URL}/documents`
   : 'http://127.0.0.1:8000/api/v1/documents';
@@ -167,6 +169,7 @@ export const documentService = {
    * Confirm or correct extracted medical entities
    */
   async confirmDocument(documentId, updates) {
+    let confirmedDoc = null;
     try {
       const response = await fetch(`${API_BASE_URL}/${documentId}/confirm`, {
         method: 'PUT',
@@ -174,21 +177,35 @@ export const documentService = {
         body: JSON.stringify({ ...updates, confirmed: true })
       });
       if (response.ok) {
-        return await response.json();
+        confirmedDoc = await response.json();
       }
     } catch (err) {
       console.warn('Backend document confirm error, using client fallback:', err.message);
     }
 
-    const docIndex = clientFallbackDocuments.findIndex(d => d.document_id === documentId);
-    if (docIndex !== -1) {
-      clientFallbackDocuments[docIndex] = {
-        ...clientFallbackDocuments[docIndex],
-        ...updates,
-        confirmed: true,
-        processing_status: 'confirmed'
-      };
-      return clientFallbackDocuments[docIndex];
+    if (!confirmedDoc) {
+      const docIndex = clientFallbackDocuments.findIndex(d => d.document_id === documentId);
+      if (docIndex !== -1) {
+        clientFallbackDocuments[docIndex] = {
+          ...clientFallbackDocuments[docIndex],
+          ...updates,
+          confirmed: true,
+          processing_status: 'confirmed',
+          status: 'confirmed'
+        };
+        confirmedDoc = clientFallbackDocuments[docIndex];
+      }
+    }
+
+    if (confirmedDoc) {
+      const pid = confirmedDoc.patient_id || patientService.getCurrentPatientId();
+      if (pid) {
+        patientService.mergeConfirmedDocumentData(pid, confirmedDoc);
+      }
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('caseflow-queue-updated'));
+      }
+      return confirmedDoc;
     }
     return null;
   },

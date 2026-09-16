@@ -11,17 +11,21 @@ class ExtractedMedication(BaseModel):
     name: str
     dose: Optional[str] = None
     frequency: Optional[str] = None
+    duration: Optional[str] = None
     instructions: Optional[str] = None
     confidence: float = 0.90
+    source: str = "ocr"
 
 
 class ExtractedLabFinding(BaseModel):
-    parameter: str
+    parameter: Optional[str] = None
+    name: Optional[str] = None
     value: str
     unit: Optional[str] = None
     status: Optional[str] = "Normal"  # Normal, Elevated, Low, Critical
     reference_range: Optional[str] = None
     confidence: float = 0.92
+    source: str = "ocr"
 
 
 class TimelineEventMetadata(BaseModel):
@@ -44,6 +48,7 @@ class DocumentOCRResult(BaseModel):
     date_detected: Optional[str] = None
     confidence_score: float = 0.90
     processing_status: str = "extracted"  # uploaded, processing_ocr, extracted, confirmed, error
+    status: Optional[str] = "extracted"
     confirmed: bool = False
     raw_text: Optional[str] = None
     medications: List[ExtractedMedication] = []
@@ -51,6 +56,9 @@ class DocumentOCRResult(BaseModel):
     diagnoses: List[str] = []
     timeline_metadata: Optional[TimelineEventMetadata] = None
     upload_timestamp: Optional[str] = None
+    uploaded_at: Optional[str] = None
+    source: str = "ocr"
+    extracted_data: Optional[Dict[str, Any]] = None
 
 
 class DocumentUpdateRequest(BaseModel):
@@ -60,4 +68,5 @@ class DocumentUpdateRequest(BaseModel):
     medications: Optional[List[ExtractedMedication]] = None
     lab_findings: Optional[List[ExtractedLabFinding]] = None
     diagnoses: Optional[List[str]] = None
+    extracted_data: Optional[Dict[str, Any]] = None
     confirmed: bool = True

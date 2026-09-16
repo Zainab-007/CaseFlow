@@ -8,6 +8,7 @@ import RedFlagBanner from '../../components/doctor/RedFlagBanner';
 import ClinicalTimeline from '../../components/doctor/ClinicalTimeline';
 import VerificationActionBar from '../../components/doctor/VerificationActionBar';
 import { patientService } from '../../services/patientService';
+import { documentService } from '../../services/documentService';
 import {
   User,
   Clock,
@@ -17,6 +18,7 @@ import {
   Sparkles,
   AlertCircle,
   FileCheck2,
+  CheckCircle2,
   Heart,
   Pill,
   Shield,
@@ -42,6 +44,16 @@ export default function PatientDetailPage() {
       try {
         const data = await patientService.getPatient(id);
         if (isMounted && data) {
+          if (!data.documents || data.documents.length === 0) {
+            try {
+              const docs = await documentService.getPatientDocuments(data.id || id);
+              if (docs && docs.length > 0) {
+                data.documents = docs;
+              }
+            } catch (dErr) {
+              // ignore
+            }
+          }
           setPatient(data);
           setVerificationStatus(data.verification_status || 'Pending Review');
         }
@@ -133,7 +145,8 @@ export default function PatientDetailPage() {
   // Structured history items
   const hpi = patient.structured_history?.hpi || {};
   const pastMedical = patient.structured_history?.past_medical_history || [];
-  const currentMeds = patient.structured_history?.current_medications || [];
+  const currentMeds = patient.structured_history?.current_medications || patient.medications || [];
+  const labs = patient.structured_history?.labs || patient.structured_history?.lab_findings || patient.labs || [];
   const allergies = patient.structured_history?.allergies || [];
   const familyHistory = patient.structured_history?.family_history || [];
   const personalSocial = patient.structured_history?.personal_social || {};
@@ -357,11 +370,12 @@ export default function PatientDetailPage() {
           </Card>
 
           {/* Past History & Medications Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Past History, Medications & Lab Findings Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Past Medical History */}
             <Card>
               <CardHeader>
-                <CardTitle>Past Medical & Surgical History</CardTitle>
+                <CardTitle>Past Medical History</CardTitle>
                 <Badge variant="source-doc" size="sm">Document-extracted</Badge>
               </CardHeader>
               <CardContent>
@@ -375,8 +389,8 @@ export default function PatientDetailPage() {
                             Diagnosed: {item.diagnosed || '—'} • Control: {item.control || '—'}
                           </span>
                         </div>
-                        <Badge variant={item.source === 'document-extracted' ? 'source-doc' : 'source-patient'} size="sm">
-                          {item.source || 'reported'}
+                        <Badge variant={item.source === 'document-extracted' || item.source === 'ocr' ? 'source-doc' : 'source-patient'} size="sm">
+                          {item.source === 'ocr' || item.source === 'document-extracted' ? 'Source: Document' : (item.source || 'reported')}
                         </Badge>
                       </li>
                     ))}
@@ -399,19 +413,69 @@ export default function PatientDetailPage() {
                     {currentMeds.map((med, idx) => (
                       <li key={idx} className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 flex justify-between items-center">
                         <div>
-                          <span className="font-bold text-slate-900 block">{med.name} {med.dose || ''}</span>
+                          <span className="font-bold text-slate-900 block">
+                            {med.name} {med.dose || ''} {med.frequency ? `— ${med.frequency}` : ''}
+                          </span>
                           <span className="text-slate-500">
-                            {med.frequency || '—'} • Adherence: {med.adherence || 'Regular'}
+                            {med.duration ? `Duration: ${med.duration} • ` : ''}Adherence: {med.adherence || 'Regular'}
                           </span>
                         </div>
-                        <Badge variant={med.source === 'document-extracted' ? 'source-doc' : 'source-patient'} size="sm">
-                          {med.source || 'reported'}
+                        <Badge variant={med.source === 'document-extracted' || med.source === 'ocr' || med.source === 'document' ? 'source-doc' : 'source-patient'} size="sm">
+                          {med.source === 'ocr' || med.source === 'document' || med.source === 'document-extracted' ? 'Source: Document' : (med.source === 'interview' ? 'Source: Interview' : (med.source || 'reported'))}
                         </Badge>
                       </li>
                     ))}
                   </ul>
                 ) : (
                   <p className="text-xs text-slate-500 py-3">No regular daily medications reported.</p>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Laboratory & Diagnostic Findings */}
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <CardTitle>Laboratory Findings</CardTitle>
+                  {labs.length > 0 && (
+                    <span className="text-[11px] font-bold text-teal-800 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200">
+                      {labs.length} Result{labs.length > 1 ? 's' : ''}
+                    </span>
+                  )}
+                </div>
+                <Badge variant="source-doc" size="sm">Source: Document</Badge>
+              </CardHeader>
+              <CardContent>
+                {labs.length > 0 ? (
+                  <ul className="space-y-2.5 text-xs">
+                    {labs.map((lab, idx) => (
+                      <li key={idx} className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 flex justify-between items-center">
+                        <div>
+                          <span className="font-bold text-slate-900 block">{lab.parameter || lab.name}</span>
+                          <span className="text-slate-600 font-mono text-xs">
+                            Value: <strong>{lab.value}</strong> {lab.unit || ''}
+                            {lab.reference_range && ` • Ref: ${lab.reference_range}`}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          {lab.status && (
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
+                              lab.status.toLowerCase() === 'normal'
+                                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                : 'bg-amber-50 text-amber-800 border-amber-200'
+                            }`}>
+                              {lab.status}
+                            </span>
+                          )}
+                          <Badge variant={lab.source === 'ocr' || lab.source === 'document' || lab.source === 'document-extracted' ? 'source-doc' : 'source-patient'} size="sm">
+                            {lab.source === 'ocr' || lab.source === 'document' || lab.source === 'document-extracted' ? 'Source: Document' : (lab.source || 'reported')}
+                          </Badge>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-xs text-slate-500 py-3">No laboratory investigations uploaded.</p>
                 )}
               </CardContent>
             </Card>
@@ -555,6 +619,21 @@ export default function PatientDetailPage() {
                       <div className="flex justify-between text-xs text-slate-500">
                         <span>Date: {docDate}</span>
                         <span>OCR Conf: {docConf}</span>
+                      </div>
+
+                      <div className="flex items-center gap-3 py-1 text-xs">
+                        <span className="flex items-center gap-1 text-emerald-700 font-bold">
+                          <CheckCircle2 className="w-3.5 h-3.5" /> Processed
+                        </span>
+                        {(doc.confirmed || doc.processing_status === 'confirmed' || doc.status === 'confirmed') ? (
+                          <span className="flex items-center gap-1 text-emerald-700 font-bold">
+                            <CheckCircle2 className="w-3.5 h-3.5" /> Confirmed
+                          </span>
+                        ) : (
+                          <span className="text-amber-600 font-medium">
+                            Pending Confirmation
+                          </span>
+                        )}
                       </div>
 
                       {entityList.length > 0 && (

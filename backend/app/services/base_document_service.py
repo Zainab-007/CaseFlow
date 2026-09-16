@@ -153,20 +153,37 @@ class StatefulDocumentService(BaseDocumentService):
             if v is not None:
                 doc[k] = v
 
-        doc["processing_status"] = "confirmed" if updates.get("confirmed", True) else doc["processing_status"]
-        doc["confirmed"] = updates.get("confirmed", True)
+        is_confirmed = updates.get("confirmed", True)
+        doc["processing_status"] = "confirmed" if is_confirmed else doc.get("processing_status", "extracted")
+        doc["status"] = "confirmed" if is_confirmed else doc.get("status", "extracted")
+        doc["confirmed"] = is_confirmed
 
-        # Update timeline metadata summary if medications or labs changed
+        # Update timeline metadata summary and extracted_data if medications or labs changed
         if "medications" in updates or "lab_findings" in updates:
             meds = doc.get("medications", [])
             labs = doc.get("lab_findings", [])
+            if "extracted_data" not in doc or not isinstance(doc["extracted_data"], dict):
+                doc["extracted_data"] = {}
+            doc["extracted_data"]["medications"] = meds
+            doc["extracted_data"]["labs"] = labs
+
             summary_parts = []
             if meds:
                 summary_parts.append("Meds: " + ", ".join(f"{m.get('name')} {m.get('dose', '')}" for m in meds[:3]))
             if labs:
-                summary_parts.append("Labs: " + ", ".join(f"{l.get('parameter')}: {l.get('value')}" for l in labs[:3]))
+                summary_parts.append("Labs: " + ", ".join(f"{l.get('parameter') or l.get('name')}: {l.get('value')}" for l in labs[:3]))
             if doc.get("timeline_metadata"):
                 doc["timeline_metadata"]["description"] = " | ".join(summary_parts) if summary_parts else doc["timeline_metadata"]["description"]
+
+        # Merge confirmed clinical data into the patient's canonical record
+        if is_confirmed:
+            try:
+                from app.services.base_patient_service import patient_service
+                patient_id = doc.get("patient_id")
+                if patient_id:
+                    patient_service.merge_document_extraction(patient_id, doc)
+            except Exception as e:
+                print(f"[DocumentService] Patient merge notice: {e}")
 
         return doc
 
