@@ -461,6 +461,19 @@ class AdaptiveInterviewEngine:
         return "generic_onset"
 
     def start_session(self, patient_id: str, language: str = "en", chief_complaint: Optional[str] = None) -> Dict[str, Any]:
+        # Gating check: Explicit patient consent is required before starting clinical interview
+        try:
+            from app.services.base_patient_service import patient_service
+            pat = patient_service._patients.get(patient_id)
+            if pat:
+                consent = pat.get("consent") or {}
+                if not consent.get("given", False):
+                    raise PermissionError("Patient consent is required before starting the clinical interview.")
+        except PermissionError:
+            raise
+        except Exception:
+            pass
+
         session_id = str(uuid.uuid4())[:8]
         canonical_lang = canonical_language(language)
 

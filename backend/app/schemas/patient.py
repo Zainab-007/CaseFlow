@@ -7,6 +7,19 @@ from typing import Optional, List, Any
 from pydantic import BaseModel, Field
 
 
+class PatientConsent(BaseModel):
+    given: bool = Field(default=False, description="Whether explicit patient consent was given")
+    timestamp: Optional[str] = Field(default=None, description="Authoritative server ISO timestamp")
+    version: str = Field(default="v1", description="Consent wording version")
+    method: str = Field(default="kiosk", description="Method of recording consent")
+
+
+class ConsentRequest(BaseModel):
+    given: bool = Field(default=True, description="Explicit consent granted status")
+    version: str = Field(default="v1", description="Consent wording version")
+    method: str = Field(default="kiosk", description="Method of recording consent")
+
+
 class PatientBase(BaseModel):
     name: str = Field(..., example="Ramesh Chandra Sharma")
     age: int = Field(..., ge=0, le=125, example=62)
@@ -17,10 +30,11 @@ class PatientBase(BaseModel):
     language: Optional[str] = Field(default="en", example="en")
     department: str = Field(default="General Medicine", example="General Medicine")
     chief_complaint: Optional[str] = Field(None, example="Headache")
+    consent: Optional[PatientConsent] = None
 
 
 class PatientCreate(PatientBase):
-    consent_obtained: bool = Field(True, description="Explicit DPDP Act 2023 & ABDM consent")
+    consent_obtained: bool = Field(False, description="Explicit DPDP Act 2023 & ABDM consent")
 
 
 class PatientQueueItem(BaseModel):
@@ -39,6 +53,7 @@ class PatientQueueItem(BaseModel):
     language: str
     arrived_at: str
     verification_status: str = "Pending Review"
+    consent: Optional[PatientConsent] = None
 
 
 class VerificationUpdate(BaseModel):
@@ -66,4 +81,5 @@ class PatientUpdate(BaseModel):
     labs: Optional[List[dict]] = None
     structured_history: Optional[dict] = None
     is_doctor_edit: Optional[bool] = False
+    consent: Optional[PatientConsent] = None
 

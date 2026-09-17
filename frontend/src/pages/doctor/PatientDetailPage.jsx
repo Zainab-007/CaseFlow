@@ -175,6 +175,13 @@ export default function PatientDetailPage() {
   const ros = patient.structured_history?.review_of_systems || {};
   const timelineEvents = patient.timeline || [];
   const documents = patient.documents || [];
+  const hasConsent = Boolean(
+    patient?.consent?.given ||
+    patient?.consent === true ||
+    patient?.consent_obtained ||
+    patient?.consent_given ||
+    (Array.isArray(patient?.timeline) && patient.timeline.some((e) => e.type === 'consent_given' || e.category === 'Consent'))
+  );
 
   return (
     <div className="max-w-7xl mx-auto p-6 space-y-6 pb-28">
@@ -227,13 +234,56 @@ export default function PatientDetailPage() {
             </div>
           </div>
 
-          {/* Triage Vitals Summary */}
-          <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl text-xs space-y-1 w-full md:w-auto">
-            <span className="font-bold text-slate-500 uppercase tracking-wider block text-[10px]">
-              Triage Desk Vitals
-            </span>
-            <p className="font-bold text-slate-800">{vitalsSummary}</p>
-            <span className="text-slate-400 block text-[11px]">{triageNurse}</span>
+          {/* Right Header Badges: Consent & Triage Vitals */}
+          <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+            {/* Consent Indicator */}
+            <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl text-xs space-y-1 min-w-[190px]">
+              <span className="font-bold text-slate-500 uppercase tracking-wider block text-[10px]">
+                Consent
+              </span>
+              {hasConsent ? (
+                <div>
+                  <p className="font-bold text-emerald-800 flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 inline shrink-0" />
+                    <span>Patient consent recorded</span>
+                  </p>
+                  <div className="text-[11px] text-slate-500 mt-0.5 space-x-1 font-medium">
+                    {patient?.consent?.timestamp ? (
+                      <span>
+                        {new Date(patient.consent.timestamp).toLocaleDateString('en-GB', {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric'
+                        })}
+                      </span>
+                    ) : (
+                      <span>Recorded</span>
+                    )}
+                    <span>•</span>
+                    <span>
+                      Method: {typeof patient?.consent === 'object' && patient?.consent?.method ? (patient.consent.method.charAt(0).toUpperCase() + patient.consent.method.slice(1)) : 'Kiosk'}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <p className="font-bold text-amber-700 flex items-center gap-1">
+                    <AlertCircle className="w-3.5 h-3.5 text-amber-600 inline shrink-0" />
+                    <span>Consent not recorded</span>
+                  </p>
+                  <span className="text-slate-400 block text-[11px]">Explicit consent pending</span>
+                </div>
+              )}
+            </div>
+
+            {/* Triage Vitals Summary */}
+            <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl text-xs space-y-1 min-w-[170px]">
+              <span className="font-bold text-slate-500 uppercase tracking-wider block text-[10px]">
+                Triage Desk Vitals
+              </span>
+              <p className="font-bold text-slate-800">{vitalsSummary}</p>
+              <span className="text-slate-400 block text-[11px]">{triageNurse}</span>
+            </div>
           </div>
         </div>
       </div>

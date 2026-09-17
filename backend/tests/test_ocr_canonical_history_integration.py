@@ -79,6 +79,9 @@ def test_ocr_canonical_history_integration_suite():
     pat_a_id = reg_a["id"]
     print(f"Registered Patient A: {pat_a_id} ({reg_a['name']})")
 
+    # Record consent for Patient A
+    client.post(f"/api/v1/patients/{pat_a_id}/consent", json={"given": True})
+
     # Complete interview for Patient A with Paracetamol already reported
     int_a = client.post("/api/v1/interviews/start", json={
         "patient_id": pat_a_id,

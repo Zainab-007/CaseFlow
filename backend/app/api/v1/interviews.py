@@ -23,11 +23,14 @@ async def start_adaptive_interview(payload: StartSessionRequest):
     Initialize a new adaptive interview session.
     Starts at the root question: 'What brings you to the doctor today?'
     """
-    return interview_engine.start_session(
-        patient_id=payload.patient_id,
-        language=payload.language,
-        chief_complaint=payload.chief_complaint
-    )
+    try:
+        return interview_engine.start_session(
+            patient_id=payload.patient_id,
+            language=payload.language,
+            chief_complaint=payload.chief_complaint
+        )
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
 
 
 @router.get("/{session_id}", response_model=AdaptiveSessionState)

@@ -319,6 +319,16 @@ let clientFallbackPatients = {
   }
 };
 
+// Seeded demo patients (CF-2026-001 through CF-2026-004) represent existing verified OPD patients with consent
+Object.values(clientFallbackPatients).forEach(p => {
+  p.consent = {
+    given: true,
+    timestamp: '2026-09-14T10:15:00',
+    version: 'v1',
+    method: 'kiosk'
+  };
+});
+
 const DEMO_PATIENT_IDS = ['CF-2026-001', 'CF-2026-002', 'CF-2026-003', 'CF-2026-004'];
 
 export const patientService = {
@@ -382,6 +392,107 @@ export const patientService = {
   },
 
   /**
+   * Record explicit patient consent and append a single consent_given timeline event.
+   */
+  async recordConsent(patientId, { given = true, version = 'v1', method = 'kiosk' } = {}) {
+    const targetId = patientId || this.getCurrentPatientId();
+    if (!targetId) {
+      console.error('[patientService.recordConsent] Target patient ID is null');
+      return null;
+    }
+    console.log(`[patientService.recordConsent] patient_id: ${targetId}, given: ${given}`);
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/${targetId}/consent`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ given: Boolean(given), version: version || 'v1', method: method || 'kiosk' })
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        clientFallbackPatients[targetId] = updated;
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('caseflow-queue-updated'));
+        }
+        return updated;
+      } else {
+        const errJson = await res.json().catch(() => ({}));
+        console.error(`[patientService.recordConsent] Backend status ${res.status}:`, errJson);
+      }
+    } catch (err) {
+      console.warn('Backend consent record failed, using client fallback:', err.message);
+    }
+
+    let p = clientFallbackPatients[targetId];
+    if (!p) {
+      p = {
+        id: targetId,
+        queue_token: `OPD-${104 + Object.keys(clientFallbackPatients).length}`,
+        name: 'Patient',
+        age: 30,
+        gender: 'Other',
+        department: 'General Medicine',
+        triage_priority: 'Routine',
+        chief_complaint: 'Routine medical intake',
+        intake_status: 'Registered',
+        verification_status: 'Pending Review',
+        demographics: { name: 'Patient', age: 30, gender: 'Other' },
+        structured_history: { hpi: {}, past_medical_history: [], current_medications: [], labs: [], allergies: [] },
+        medications: [],
+        labs: [],
+        timeline: []
+      };
+      clientFallbackPatients[targetId] = p;
+    }
+
+    const nowIso = new Date().toISOString();
+    const nowDt = new Date();
+    p.consent = {
+      given: Boolean(given),
+      timestamp: given ? nowIso : null,
+      version: version || 'v1',
+      method: method || 'kiosk'
+    };
+
+    if (given) {
+      if (!p.timeline) p.timeline = [];
+      const existingConsent = p.timeline.some((e) => e.type === 'consent_given');
+      if (!existingConsent) {
+        p.timeline.push({
+          id: `TL-CONSENT-${targetId}`,
+          patient_id: targetId,
+          type: 'consent_given',
+          source: 'patient',
+          category: 'Consent',
+          title: 'Patient consent recorded',
+          description: 'Patient provided consent to continue the CaseFlow intake',
+          timestamp: nowIso,
+          date: nowDt.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+          time: nowDt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        });
+      }
+    }
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('caseflow-queue-updated'));
+    }
+    return p;
+  },
+
+  hasPatientConsent(patientId = null) {
+    const targetId = patientId || this.getCurrentPatientId();
+    if (!targetId) return false;
+    const p = clientFallbackPatients[targetId];
+    return Boolean(
+      p?.consent?.given ||
+      p?.consent === true ||
+      p?.consent_given ||
+      p?.consent_obtained ||
+      (Array.isArray(p?.timeline) && p.timeline.some((e) => e.type === 'consent_given' || e.category === 'Consent'))
+    );
+  },
+
+  /**
    * Canonical queue statistics calculator
    * Guarantees 100% agreement between header counters, metric cards, and patient table.
    */
@@ -425,7 +536,8 @@ export const patientService = {
       red_flag_note: p.red_flag_note,
       language: p.language,
       arrived_at: p.arrived_at,
-      verification_status: p.verification_status
+      verification_status: p.verification_status,
+      consent: p.consent || { given: false, timestamp: null, version: 'v1', method: 'kiosk' }
     }));
   },
 
@@ -499,6 +611,12 @@ export const patientService = {
         chief_complaint: updateData.chief_complaint || 'Routine intake',
         intake_status: updateData.intake_status || 'Registered',
         verification_status: 'Pending Review',
+        consent: {
+          given: false,
+          timestamp: null,
+          version: 'v1',
+          method: 'kiosk'
+        },
         demographics: {
           name: updateData.name || 'Patient',
           age: Number(updateData.age) || 30,
@@ -689,6 +807,12 @@ export const patientService = {
       language: patientData.preferred_language || 'Hindi',
       arrived_at: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       verification_status: 'Pending Review',
+      consent: {
+        given: false,
+        timestamp: null,
+        version: 'v1',
+        method: 'kiosk'
+      },
       demographics: {
         name: patientData.name || 'New Patient',
         age: Number(patientData.age) || 30,
@@ -792,6 +916,12 @@ export const patientService = {
         language: langDisplay,
         arrived_at: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         verification_status: 'Pending Review',
+        consent: {
+          given: false,
+          timestamp: null,
+          version: 'v1',
+          method: 'kiosk'
+        },
         demographics: {
           name: 'Patient',
           age: 30,
@@ -894,6 +1024,12 @@ export const patientService = {
         chief_complaint: 'Routine medical intake',
         intake_status: 'Completed',
         verification_status: 'Pending Review',
+        consent: {
+          given: false,
+          timestamp: null,
+          version: 'v1',
+          method: 'kiosk'
+        },
         demographics: { name: 'Patient', age: 30, gender: 'Other' },
         structured_history: { current_medications: [], labs: [], past_medical_history: [], hpi: {} },
         medications: [],

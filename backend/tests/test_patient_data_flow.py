@@ -54,6 +54,9 @@ def test_complete_patient_data_flow_and_isolation():
     assert patient["chief_complaint"] == "Headache"
     assert patient_id != "CF-2026-001", "New patient must have their own unique ID, not Ramesh's"
 
+    # Record consent before interview
+    client.post(f"/api/v1/patients/{patient_id}/consent", json={"given": True})
+
     # STEP 3: Start interview using THAT patient's patient_id
     print(f"\n--- STEP 3: Start interview session for patient_id={patient_id} ---")
     start_payload = {
@@ -172,6 +175,9 @@ def test_complete_patient_data_flow_and_isolation():
     assert rahul["name"] == "Rahul Demo"
     assert rahul["age"] == 35
     assert rahul["chief_complaint"] == "Fever"
+
+    # Record consent for Rahul
+    client.post(f"/api/v1/patients/{rahul_id}/consent", json={"given": True})
 
     # Start interview for Rahul
     rahul_session_res = client.post("/api/v1/interviews/start", json={"patient_id": rahul_id, "language": "hi"})

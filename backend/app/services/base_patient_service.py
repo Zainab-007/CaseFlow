@@ -48,6 +48,17 @@ class BasePatientService(ABC):
         pass
 
     @abstractmethod
+    def record_consent(
+        self,
+        patient_id: str,
+        given: bool = True,
+        version: str = "v1",
+        method: str = "kiosk"
+    ) -> Optional[Dict[str, Any]]:
+        """Records explicit patient consent and manages the consent_given timeline event."""
+        pass
+
+    @abstractmethod
     def merge_document_extraction(
         self,
         patient_id: str,
@@ -412,6 +423,14 @@ class StatefulPatientService(BasePatientService):
             ]
         }
 
+        for p in [p1, p2, p3, p4]:
+            p["consent"] = {
+                "given": True,
+                "timestamp": "2026-09-14T10:15:00",
+                "version": "v1",
+                "method": "kiosk"
+            }
+
         self._patients[p1["id"]] = p1
         self._patients[p2["id"]] = p2
         self._patients[p3["id"]] = p3
@@ -459,6 +478,12 @@ class StatefulPatientService(BasePatientService):
             "arrived_at": now_time,
             "verification_status": "Pending Review",
             "doctor_notes": None,
+            "consent": {
+                "given": False,
+                "timestamp": None,
+                "version": "v1",
+                "method": "kiosk"
+            },
             "demographics": {
                 "name": name,
                 "age": age,
@@ -520,6 +545,102 @@ class StatefulPatientService(BasePatientService):
 
         self._patients[new_id] = record
         return record
+
+    def record_consent(
+        self,
+        patient_id: str,
+        given: bool = True,
+        version: str = "v1",
+        method: str = "kiosk"
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Records explicit patient consent and appends a single consent_given timeline event.
+        Guarantees patient isolation: never alters other patient records.
+        """
+        patient = self._patients.get(patient_id)
+        if not patient:
+            now_time = datetime.now().strftime("%I:%M %p")
+            patient = {
+                "id": patient_id,
+                "queue_token": f"OPD-{104 + len(self._patients)}",
+                "name": "Intake Patient",
+                "age": 30,
+                "gender": "Other",
+                "phone": "+91 99000 00000",
+                "department": "General Medicine",
+                "triage_priority": "Routine",
+                "chief_complaint": "Routine medical intake",
+                "intake_status": "Registered",
+                "red_flag_detected": False,
+                "red_flag_note": None,
+                "language": "Hindi / English",
+                "arrived_at": now_time,
+                "verification_status": "Pending Review",
+                "doctor_notes": None,
+                "consent": {
+                    "given": False,
+                    "timestamp": None,
+                    "version": version or "v1",
+                    "method": method or "kiosk"
+                },
+                "demographics": {
+                    "name": "Intake Patient",
+                    "age": 30,
+                    "gender": "Other",
+                    "blood_group": "Unknown",
+                    "arrived_at": now_time,
+                    "consultation_type": "New Kiosk Registration",
+                    "ayush_mode": "Allopathic Standard (AYUSH Inactive)"
+                },
+                "triage": {
+                    "priority": "Routine",
+                    "vitals_summary": "Pending consultation assessment",
+                    "triage_nurse": "Station 1"
+                },
+                "structured_history": {"hpi": {}, "past_medical_history": [], "current_medications": [], "allergies": []},
+                "medications": [],
+                "labs": [],
+                "timeline": []
+            }
+            self._patients[patient_id] = patient
+
+        if given:
+            now_iso = datetime.now().isoformat()
+            now_dt = datetime.now()
+            patient["consent"] = {
+                "given": True,
+                "timestamp": now_iso,
+                "version": version or "v1",
+                "method": method or "kiosk"
+            }
+
+            # Check if consent_given timeline event already exists
+            existing_consent = any(e.get("type") == "consent_given" for e in patient.get("timeline", []))
+            if not existing_consent:
+                timeline_ev = {
+                    "id": f"TL-CONSENT-{patient_id}",
+                    "patient_id": patient_id,
+                    "type": "consent_given",
+                    "source": "patient",
+                    "category": "Consent",
+                    "title": "Patient consent recorded",
+                    "description": "Patient provided consent to continue the CaseFlow intake",
+                    "timestamp": now_iso,
+                    "date": now_dt.strftime("%d %b %Y"),
+                    "time": now_dt.strftime("%I:%M %p")
+                }
+                if "timeline" not in patient or not isinstance(patient["timeline"], list):
+                    patient["timeline"] = []
+                patient["timeline"].append(timeline_ev)
+        else:
+            patient["consent"] = {
+                "given": False,
+                "timestamp": None,
+                "version": version or "v1",
+                "method": method or "kiosk"
+            }
+
+        return patient
 
     def generate_patient_clinical_summary(
         self,
@@ -618,6 +739,12 @@ class StatefulPatientService(BasePatientService):
                 "arrived_at": datetime.now().strftime("%I:%M %p"),
                 "verification_status": "Pending Review",
                 "doctor_notes": None,
+                "consent": {
+                    "given": False,
+                    "timestamp": None,
+                    "version": "v1",
+                    "method": "kiosk"
+                },
                 "demographics": {
                     "name": "Intake Patient",
                     "age": 30,
@@ -733,6 +860,20 @@ class StatefulPatientService(BasePatientService):
         else:
             record["medications"] = []
             record["labs"] = []
+
+        # Ensure consent is properly structured and consistent with timeline
+        if "consent" not in record or not isinstance(record["consent"], dict):
+            has_timeline_consent = any(e.get("type") == "consent_given" for e in record.get("timeline", []))
+            record["consent"] = {
+                "given": has_timeline_consent,
+                "timestamp": datetime.now().isoformat() if has_timeline_consent else None,
+                "version": "v1",
+                "method": "kiosk"
+            }
+        elif not record["consent"].get("given"):
+            has_timeline_consent = any(e.get("type") == "consent_given" for e in record.get("timeline", []))
+            if has_timeline_consent:
+                record["consent"]["given"] = True
 
         # Dynamic documents linkage from document_service (strictly isolated by patient_id)
         try:
@@ -900,6 +1041,17 @@ class StatefulPatientService(BasePatientService):
                 "time": now_dt.strftime("%I:%M %p")
             })
 
+        # Handle explicit consent update if supplied
+        if "consent" in update_data and update_data["consent"] is not None:
+            c_data = update_data["consent"]
+            if isinstance(c_data, dict):
+                self.record_consent(
+                    patient_id=patient_id,
+                    given=c_data.get("given", True),
+                    version=c_data.get("version", "v1"),
+                    method=c_data.get("method", "kiosk")
+                )
+
         # Refresh AI clinical summary
         patient["ai_clinical_summary"] = self.generate_patient_clinical_summary(patient=patient)
 
@@ -944,7 +1096,8 @@ class StatefulPatientService(BasePatientService):
                 "red_flag_note": p.get("red_flag_note"),
                 "language": p.get("language", "Hindi"),
                 "arrived_at": p.get("arrived_at", "10:00 AM"),
-                "verification_status": p.get("verification_status", "Pending Review")
+                "verification_status": p.get("verification_status", "Pending Review"),
+                "consent": p.get("consent", {"given": False, "timestamp": None, "version": "v1", "method": "kiosk"})
             })
         return queue
 

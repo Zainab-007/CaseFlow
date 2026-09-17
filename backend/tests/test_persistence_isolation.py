@@ -122,6 +122,10 @@ def test_persistence_and_isolation():
     assert res_doc_b.status_code == 200
     doc_b_id = res_doc_b.json()["document_id"]
 
+    # Patient A & B Consent
+    client.post(f"/api/v1/patients/{id_a}/consent", json={"given": True})
+    client.post(f"/api/v1/patients/{id_b}/consent", json={"given": True})
+
     # Patient A Interview
     res_int_a = client.post("/api/v1/interviews/start", json={"patient_id": id_a, "language": "hi"})
     session_a = res_int_a.json()["session_id"]

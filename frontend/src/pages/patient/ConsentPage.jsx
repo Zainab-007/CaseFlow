@@ -3,19 +3,65 @@ import { useNavigate } from 'react-router-dom';
 import Button from '../../components/ui/Button';
 import Alert from '../../components/ui/Alert';
 import AudioPromptBar from '../../components/patient/AudioPromptBar';
-import { ArrowRight, ArrowLeft, ShieldCheck, CheckSquare, Square, Lock, Info } from 'lucide-react';
+import { patientService } from '../../services/patientService';
+import { ArrowRight, ArrowLeft, ShieldCheck, CheckSquare, Square, Lock, Info, XCircle, AlertTriangle } from 'lucide-react';
 
 export default function ConsentPage() {
   const navigate = useNavigate();
-  const [consentGranted, setConsentGranted] = useState(true);
-  const [dataSharingGranted, setDataSharingGranted] = useState(true);
+  const [consentGranted, setConsentGranted] = useState(false);
+  const [dataSharingGranted, setDataSharingGranted] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [declinedNotice, setDeclinedNotice] = useState(false);
+  const [errorMessage, setErrorMessage] = useState(null);
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
+    setErrorMessage(null);
     if (!consentGranted) {
-      alert('Consent is required to proceed with pre-consultation intake. You may consult the doctor directly without using this kiosk.');
+      setDeclinedNotice(true);
       return;
     }
-    navigate('/patient/language');
+    setSaving(true);
+    try {
+      const patientId = patientService.getCurrentPatientId();
+      console.log('[ConsentPage] Recording consent for patient_id:', patientId);
+      if (!patientId) {
+        throw new Error('No active patient session found. Please register first.');
+      }
+      const result = await patientService.recordConsent(patientId, {
+        given: true,
+        version: 'v1',
+        method: 'kiosk'
+      });
+      console.log('[ConsentPage] Consent recorded response:', result);
+      if (!result || !result.consent || result.consent.given !== true) {
+        throw new Error('Consent could not be verified in the patient record.');
+      }
+      navigate('/patient/language');
+    } catch (err) {
+      console.error('[ConsentPage] Error recording consent:', err);
+      setErrorMessage(err.message || 'Unable to record consent. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDecline = async () => {
+    setConsentGranted(false);
+    setDeclinedNotice(true);
+    setErrorMessage(null);
+    try {
+      const patientId = patientService.getCurrentPatientId();
+      console.log('[ConsentPage] Declining consent for patient_id:', patientId);
+      if (patientId) {
+        await patientService.recordConsent(patientId, {
+          given: false,
+          version: 'v1',
+          method: 'kiosk'
+        });
+      }
+    } catch (err) {
+      console.error('[ConsentPage] Error recording declined consent:', err);
+    }
   };
 
   return (
@@ -45,11 +91,44 @@ export default function ConsentPage() {
           CaseFlow prepares clinical documentation to assist your doctor. It does <strong>not</strong> make medical diagnoses or prescribe medications. Your doctor reviews and verifies all information.
         </Alert>
 
+        {/* Visible Error Banner if consent recording fails */}
+        {errorMessage && (
+          <div className="p-4 bg-rose-50 border-2 border-rose-200 rounded-2xl flex items-start gap-3 text-rose-900">
+            <XCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+            <div className="text-xs font-medium space-y-1">
+              <p className="font-bold text-sm text-rose-950">
+                {errorMessage}
+              </p>
+              <p>
+                कृपया पुनः प्रयास करें। यदि समस्या बनी रहे तो ओपीडी सहायक से संपर्क करें।
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Declined Warning Banner if patient declines or attempts bypass without consent */}
+        {declinedNotice && !consentGranted && (
+          <div className="p-4 bg-amber-50 border-2 border-amber-200 rounded-2xl flex items-start gap-3 text-amber-900">
+            <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+            <div className="text-xs font-medium space-y-1">
+              <p className="font-bold text-sm text-amber-950">
+                Consent is required to continue with the CaseFlow intake.
+              </p>
+              <p>
+                बिना सहमति के केसफ्लो डिजिटल साक्षात्कार जारी नहीं रखा जा सकता। आप सीधे ओपीडी परामर्श कक्ष में डॉक्टर से मिल सकते हैं।
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Granular Consent Checkboxes */}
         <div className="space-y-3.5 pt-2">
           {/* Main Intake Consent */}
           <div
-            onClick={() => setConsentGranted(!consentGranted)}
+            onClick={() => {
+              setConsentGranted(!consentGranted);
+              if (!consentGranted) setDeclinedNotice(false);
+            }}
             className={`p-4 rounded-2xl border-2 transition cursor-pointer select-none flex items-start gap-3.5 ${
               consentGranted
                 ? 'border-teal-700 bg-teal-50/60 ring-2 ring-teal-600/20'
@@ -118,17 +197,27 @@ export default function ConsentPage() {
           Back
         </Button>
 
-        <Button
-          variant="kiosk"
-          size="lg"
-          icon={ArrowRight}
-          iconPosition="right"
-          onClick={handleContinue}
-          disabled={!consentGranted}
-          className="min-w-[200px]"
-        >
-          I Agree (मैं सहमत हूँ)
-        </Button>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={handleDecline}
+            className="text-xs font-bold text-slate-500 hover:text-slate-800 px-3 py-2 rounded-xl transition cursor-pointer"
+          >
+            Decline (अस्वीकार करें)
+          </button>
+
+          <Button
+            variant="kiosk"
+            size="lg"
+            icon={ArrowRight}
+            iconPosition="right"
+            onClick={handleContinue}
+            disabled={!consentGranted || saving}
+            className="min-w-[200px]"
+          >
+            {saving ? 'Recording...' : 'I Agree (मैं सहमत हूँ)'}
+          </Button>
+        </div>
       </div>
     </div>
   );

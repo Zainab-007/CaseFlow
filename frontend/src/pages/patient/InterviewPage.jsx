@@ -46,6 +46,13 @@ export default function InterviewPage() {
           patientRecord = await patientService.getPatient(patientId);
         }
 
+        // GATING CHECK: Verify explicit patient consent before starting clinical interview
+        if (patientRecord && patientRecord.consent && patientRecord.consent.given === false) {
+          console.warn('Clinical interview blocked: Patient consent not granted.');
+          navigate('/patient/consent');
+          return;
+        }
+
         const registeredComplaint = patientRecord?.chief_complaint;
         const selectedLang = patientService.getPatientLanguage(patientId) || patientRecord?.language || 'en';
         const initialSession = await interviewService.startSession(patientId, selectedLang, registeredComplaint);
@@ -55,6 +62,9 @@ export default function InterviewPage() {
         }
       } catch (err) {
         console.error('Failed to start interview session:', err);
+        if (err?.message?.includes('consent') || err?.status === 403) {
+          navigate('/patient/consent');
+        }
         setLoading(false);
       }
     }

@@ -39,6 +39,13 @@ function initClientFallback(patientId = null, language = 'en', chiefComplaint = 
   const targetPatientId = patientId || patientService.getCurrentPatientId() || 'CF-2026-005';
   const canonicalLang = canonicalLanguage(language);
 
+  // Client-fallback gating check: Ensure patient consent was granted
+  if (targetPatientId && !patientService.hasPatientConsent(targetPatientId) && !patientService.isDemoPatient(targetPatientId)) {
+    const err = new Error('Patient consent is required before starting the clinical interview.');
+    err.status = 403;
+    throw err;
+  }
+
   let cleanedCC = chiefComplaint && String(chiefComplaint).trim() ? String(chiefComplaint).trim() : null;
 
   let initialQId = 'root_complaint';
@@ -236,7 +243,16 @@ export const interviewService = {
       if (response.ok) {
         return await response.json();
       }
+      if (response.status === 403) {
+        const errJson = await response.json().catch(() => ({}));
+        const err = new Error(errJson.detail || 'Patient consent is required before starting the clinical interview.');
+        err.status = 403;
+        throw err;
+      }
     } catch (err) {
+      if (err.status === 403 || err.message?.includes('consent')) {
+        throw err;
+      }
       console.warn('Backend interview API unavailable, using client fallback engine:', err.message);
     }
     return initClientFallback(targetPatientId, language, chiefComplaint);

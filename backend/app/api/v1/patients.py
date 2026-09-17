@@ -10,7 +10,8 @@ from app.schemas.patient import (
     PatientQueueItem,
     PatientCreate,
     PatientUpdate,
-    VerificationUpdate
+    VerificationUpdate,
+    ConsentRequest
 )
 from app.services.base_patient_service import patient_service
 
@@ -39,6 +40,23 @@ async def get_patient_detail(patient_id: str):
 async def register_patient(patient_data: PatientCreate):
     """Kiosk patient registration endpoint creating a new patient record."""
     return await patient_service.create_patient(patient_data.model_dump())
+
+
+@router.post("/{patient_id}/consent")
+async def record_patient_consent(patient_id: str, consent_data: ConsentRequest):
+    """
+    Record explicit patient consent for clinical intake and audit timeline.
+    Gating: clinical interview requires given=True.
+    """
+    updated = patient_service.record_consent(
+        patient_id=patient_id,
+        given=consent_data.given,
+        version=consent_data.version,
+        method=consent_data.method
+    )
+    if not updated:
+        raise HTTPException(status_code=404, detail="Patient not found")
+    return updated
 
 
 @router.put("/{patient_id}")
