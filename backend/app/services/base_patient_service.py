@@ -11,6 +11,7 @@ import uuid
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 from datetime import datetime
+from app.db.sqlite_db import init_db, save_patient_to_db, load_all_patients_from_db
 
 
 class BasePatientService(ABC):
@@ -74,9 +75,14 @@ class StatefulPatientService(BasePatientService):
     Every patient record is keyed by unique patient_id.
     """
 
-    def __init__(self):
+    def __init__(self, db_path: Optional[str] = None):
+        self.db_path = db_path
         # Key: patient_id -> full clinical patient dictionary
         self._patients: Dict[str, Dict[str, Any]] = {}
+        init_db(self.db_path)
+        db_patients = load_all_patients_from_db(self.db_path)
+        if db_patients:
+            self._patients.update(db_patients)
         self._seed_distinct_patients()
 
     def _seed_distinct_patients(self):
@@ -424,17 +430,15 @@ class StatefulPatientService(BasePatientService):
         }
 
         for p in [p1, p2, p3, p4]:
-            p["consent"] = {
-                "given": True,
-                "timestamp": "2026-09-14T10:15:00",
-                "version": "v1",
-                "method": "kiosk"
-            }
-
-        self._patients[p1["id"]] = p1
-        self._patients[p2["id"]] = p2
-        self._patients[p3["id"]] = p3
-        self._patients[p4["id"]] = p4
+            if p["id"] not in self._patients:
+                p["consent"] = {
+                    "given": True,
+                    "timestamp": "2026-09-14T10:15:00",
+                    "version": "v1",
+                    "method": "kiosk"
+                }
+                self._patients[p["id"]] = p
+                save_patient_to_db(p, db_path=self.db_path)
 
     async def create_patient(self, patient_data: Dict[str, Any]) -> Dict[str, Any]:
         """Creates a new patient record with a unique ID and full clinical profile."""
@@ -544,6 +548,7 @@ class StatefulPatientService(BasePatientService):
         }
 
         self._patients[new_id] = record
+        save_patient_to_db(record, db_path=self.db_path)
         return record
 
     def record_consent(
@@ -640,6 +645,7 @@ class StatefulPatientService(BasePatientService):
                 "method": method or "kiosk"
             }
 
+        save_patient_to_db(patient, db_path=self.db_path)
         return patient
 
     def generate_patient_clinical_summary(
@@ -836,6 +842,8 @@ class StatefulPatientService(BasePatientService):
                     "time": now_dt.strftime("%I:%M %p"),
                     "source": "interview"
                 })
+
+        save_patient_to_db(patient, db_path=self.db_path)
 
     async def get_patient_by_id(self, patient_id: str) -> Optional[Dict[str, Any]]:
         """
@@ -1073,6 +1081,7 @@ class StatefulPatientService(BasePatientService):
                     "source": "interview"
                 })
 
+        save_patient_to_db(patient, db_path=self.db_path)
         return patient
 
     async def get_opd_queue(self, department: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -1090,7 +1099,7 @@ class StatefulPatientService(BasePatientService):
                 "abha_id": p.get("abha_id"),
                 "department": p.get("department", "General Medicine"),
                 "triage_priority": p.get("triage_priority", "Routine"),
-                "chief_complaint": p.get("chief_complaint", "General consultation"),
+                "chief_complaint": p.get("chief_complaint") or "General consultation",
                 "intake_status": p.get("intake_status", "Completed"),
                 "red_flag_detected": p.get("red_flag_detected", False),
                 "red_flag_note": p.get("red_flag_note"),
@@ -1113,6 +1122,7 @@ class StatefulPatientService(BasePatientService):
             patient["verification_status"] = status
             patient["doctor_notes"] = notes
             patient["verified_by"] = doctor_id or "Dr. S. K. Mehta (Reg: MCI-48201)"
+            save_patient_to_db(patient, db_path=self.db_path)
             return patient
         return {"error": "Patient not found"}
 
@@ -1280,6 +1290,7 @@ class StatefulPatientService(BasePatientService):
             patient=patient
         )
 
+        save_patient_to_db(patient, db_path=self.db_path)
         return patient
 
     @staticmethod

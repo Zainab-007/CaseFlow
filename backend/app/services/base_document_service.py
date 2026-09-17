@@ -11,6 +11,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 from datetime import datetime
 from app.services.base_ocr_service import ocr_service
+from app.db.sqlite_db import init_db, save_document_to_db, load_all_documents_from_db, delete_document_from_db
 
 
 class BaseDocumentService(ABC):
@@ -40,10 +41,14 @@ class StatefulDocumentService(BaseDocumentService):
     Links documents to patient sessions and provides CRUD operations.
     """
 
-    def __init__(self):
+    def __init__(self, db_path: Optional[str] = None):
+        self.db_path = db_path
         # Key: document_id -> document dict
         self._documents: Dict[str, Dict[str, Any]] = {}
-        # Pre-seed realistic clinical documents for default patient CF-2026-001 / CF-PAT-01
+        init_db(self.db_path)
+        db_docs = load_all_documents_from_db(self.db_path)
+        if db_docs:
+            self._documents.update(db_docs)
         self._seed_initial_records()
 
     def _seed_initial_records(self):
@@ -109,8 +114,13 @@ class StatefulDocumentService(BaseDocumentService):
             "upload_timestamp": "2026-06-10T10:00:00Z"
         }
 
-        self._documents[doc1["document_id"]] = doc1
-        self._documents[doc2["document_id"]] = doc2
+        if doc1["document_id"] not in self._documents:
+            self._documents[doc1["document_id"]] = doc1
+            save_document_to_db(doc1, db_path=self.db_path)
+
+        if doc2["document_id"] not in self._documents:
+            self._documents[doc2["document_id"]] = doc2
+            save_document_to_db(doc2, db_path=self.db_path)
 
     async def upload_document(
         self,
@@ -132,6 +142,7 @@ class StatefulDocumentService(BaseDocumentService):
             ocr_result["document_type"] = document_type
 
         self._documents[ocr_result["document_id"]] = ocr_result
+        save_document_to_db(ocr_result, db_path=self.db_path)
         return ocr_result
 
     async def get_patient_documents(self, patient_id: str) -> List[Dict[str, Any]]:
@@ -185,11 +196,13 @@ class StatefulDocumentService(BaseDocumentService):
             except Exception as e:
                 print(f"[DocumentService] Patient merge notice: {e}")
 
+        save_document_to_db(doc, db_path=self.db_path)
         return doc
 
     def delete_document(self, document_id: str) -> bool:
         if document_id in self._documents:
             del self._documents[document_id]
+            delete_document_from_db(document_id, db_path=self.db_path)
             return True
         return False
 
