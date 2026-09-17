@@ -62,6 +62,19 @@ class VerificationUpdate(BaseModel):
     doctor_id: Optional[str] = Field(default="Dr. S. K. Mehta", example="Dr. S. K. Mehta")
 
 
+class AyushParameter(BaseModel):
+    value: str = Field(default="Not provided", description="Patient reported observation value")
+    source: str = Field(default="patient-reported", description="Data provenance source")
+
+
+class AyushRecord(BaseModel):
+    nadi: Optional[AyushParameter] = None
+    mutra: Optional[AyushParameter] = None
+    mala: Optional[AyushParameter] = None
+    jihwa: Optional[AyushParameter] = None
+    completed_at: Optional[str] = None
+
+
 class PatientUpdate(BaseModel):
     name: Optional[str] = None
     age: Optional[int] = None
@@ -82,4 +95,6 @@ class PatientUpdate(BaseModel):
     structured_history: Optional[dict] = None
     is_doctor_edit: Optional[bool] = False
     consent: Optional[PatientConsent] = None
+    ayush: Optional[dict] = None
+
 

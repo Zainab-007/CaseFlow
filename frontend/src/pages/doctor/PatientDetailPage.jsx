@@ -56,6 +56,9 @@ export default function PatientDetailPage() {
           }
           setPatient(data);
           setVerificationStatus(data.verification_status || 'Pending Review');
+          if (data.ayush && Object.values(data.ayush).some(v => v && v.value && v.value !== 'Not provided')) {
+            setAyushEnabled(true);
+          }
         }
       } catch (err) {
         console.error('Failed to load patient record:', err);
@@ -750,9 +753,9 @@ export default function PatientDetailPage() {
           <Card>
             <CardHeader>
               <div>
-                <CardTitle>Configurable AYUSH Mode (Module 13)</CardTitle>
+                <CardTitle>Configurable AYUSH Mode (Pre-Consultation Kiosk Intake)</CardTitle>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Optional clinical history extension for Ayurveda, Yoga, Unani, Siddha, and Homeopathy OPDs.
+                  Optional patient-reported intake observations for Ayurveda, Yoga, Unani, Siddha, and Homeopathy OPDs.
                 </p>
               </div>
               <Button
@@ -766,25 +769,48 @@ export default function PatientDetailPage() {
             <CardContent>
               {ayushEnabled ? (
                 <div className="space-y-4 text-xs">
-                  <div className="p-3 bg-teal-50 border border-teal-200 rounded-xl text-teal-950 font-medium">
-                    Ashtavidha Pariksha (अष्टविध परीक्षा) parameters configured for Ayurvedic clinical intake.
+                  <div className="p-3 bg-teal-50 border border-teal-200 rounded-xl text-teal-950 font-medium flex items-center justify-between">
+                    <span>Patient-reported intake observations recorded during kiosk check-in (Non-diagnostic).</span>
+                    <span className="text-[10px] bg-teal-200/80 text-teal-900 px-2 py-0.5 rounded-full font-bold">
+                      Source: Patient-Reported
+                    </span>
                   </div>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    <div className="p-3 rounded-xl border bg-slate-50">
+                    <div className="p-3.5 rounded-xl border bg-slate-50 space-y-1">
                       <span className="font-bold block text-slate-900">1. Nadi (नाड़ी / Pulse)</span>
-                      <span className="text-slate-500">Vata-Pitta dominant</span>
+                      <span className="text-slate-700 font-medium block">
+                        {patient?.ayush?.nadi?.value || 'Not provided'}
+                      </span>
+                      <span className="text-[10px] text-slate-400 block">
+                        Source: {patient?.ayush?.nadi?.source || 'patient-reported'}
+                      </span>
                     </div>
-                    <div className="p-3 rounded-xl border bg-slate-50">
+                    <div className="p-3.5 rounded-xl border bg-slate-50 space-y-1">
                       <span className="font-bold block text-slate-900">2. Mutra (मूत्र / Urine)</span>
-                      <span className="text-slate-500">Normal frequency</span>
+                      <span className="text-slate-700 font-medium block">
+                        {patient?.ayush?.mutra?.value || 'Not provided'}
+                      </span>
+                      <span className="text-[10px] text-slate-400 block">
+                        Source: {patient?.ayush?.mutra?.source || 'patient-reported'}
+                      </span>
                     </div>
-                    <div className="p-3 rounded-xl border bg-slate-50">
+                    <div className="p-3.5 rounded-xl border bg-slate-50 space-y-1">
                       <span className="font-bold block text-slate-900">3. Mala (मल / Bowel)</span>
-                      <span className="text-slate-500">Vibandha (mild constipation)</span>
+                      <span className="text-slate-700 font-medium block">
+                        {patient?.ayush?.mala?.value || 'Not provided'}
+                      </span>
+                      <span className="text-[10px] text-slate-400 block">
+                        Source: {patient?.ayush?.mala?.source || 'patient-reported'}
+                      </span>
                     </div>
-                    <div className="p-3 rounded-xl border bg-slate-50">
+                    <div className="p-3.5 rounded-xl border bg-slate-50 space-y-1">
                       <span className="font-bold block text-slate-900">4. Jihwa (जिह्वा / Tongue)</span>
-                      <span className="text-slate-500">Lipta (mild coating)</span>
+                      <span className="text-slate-700 font-medium block">
+                        {patient?.ayush?.jihwa?.value || 'Not provided'}
+                      </span>
+                      <span className="text-[10px] text-slate-400 block">
+                        Source: {patient?.ayush?.jihwa?.source || 'patient-reported'}
+                      </span>
                     </div>
                   </div>
                 </div>

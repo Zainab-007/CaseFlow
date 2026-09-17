@@ -1007,6 +1007,64 @@ export const patientService = {
   },
 
   /**
+   * Record optional patient-reported AYUSH intake parameters (Nadi, Mutra, Mala, Jihwa)
+   */
+  async recordAyushIntake(patientId, ayushData) {
+    if (!patientId) return null;
+    try {
+      const res = await fetch(`${API_BASE_URL}/${patientId}/ayush`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(ayushData)
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        clientFallbackPatients[patientId] = updated;
+        return updated;
+      }
+    } catch (err) {
+      console.warn('Backend recordAyushIntake failed, using client fallback:', err.message);
+    }
+
+    // Client fallback
+    let p = clientFallbackPatients[patientId];
+    if (!p) {
+      p = { id: patientId, ayush: {} };
+      clientFallbackPatients[patientId] = p;
+    }
+
+    p.ayush = {
+      nadi: { value: ayushData?.nadi?.value || ayushData?.nadi || 'Not provided', source: 'patient-reported' },
+      mutra: { value: ayushData?.mutra?.value || ayushData?.mutra || 'Not provided', source: 'patient-reported' },
+      mala: { value: ayushData?.mala?.value || ayushData?.mala || 'Not provided', source: 'patient-reported' },
+      jihwa: { value: ayushData?.jihwa?.value || ayushData?.jihwa || 'Not provided', source: 'patient-reported' },
+      completed_at: new Date().toISOString()
+    };
+
+    if (p.demographics) {
+      p.demographics.ayush_mode = 'AYUSH Kiosk Intake Active';
+    }
+
+    if (!p.timeline) p.timeline = [];
+    if (!p.timeline.some(e => e.id === `TL-AYUSH-${patientId}`)) {
+      p.timeline.push({
+        id: `TL-AYUSH-${patientId}`,
+        patient_id: patientId,
+        type: 'ayush_intake_completed',
+        category: 'AYUSH Intake',
+        title: 'AYUSH intake recorded',
+        description: 'Patient completed optional AYUSH intake (Nadi, Mutra, Mala, Jihwa)',
+        date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        timestamp: new Date().toISOString(),
+        source: 'patient-reported'
+      });
+    }
+
+    return p;
+  },
+
+  /**
    * Merges confirmed document extractions (medications, labs, timeline) into canonical patient record
    */
   mergeConfirmedDocumentData(patientId, documentData) {

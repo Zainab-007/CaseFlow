@@ -68,6 +68,15 @@ class BasePatientService(ABC):
         """Merges confirmed OCR-extracted medications, lab findings, and timeline events."""
         pass
 
+    @abstractmethod
+    def record_ayush_intake(
+        self,
+        patient_id: str,
+        ayush_data: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        """Records patient-reported AYUSH intake observations."""
+        pass
+
 
 class StatefulPatientService(BasePatientService):
     """
@@ -529,6 +538,12 @@ class StatefulPatientService(BasePatientService):
                 "personal_social": {},
                 "review_of_systems": {}
             },
+            "ayush": {
+                "nadi": {"value": "Not provided", "source": "patient-reported"},
+                "mutra": {"value": "Not provided", "source": "patient-reported"},
+                "mala": {"value": "Not provided", "source": "patient-reported"},
+                "jihwa": {"value": "Not provided", "source": "patient-reported"}
+            },
             "medications": [],
             "labs": [],
             "timeline": [
@@ -644,6 +659,111 @@ class StatefulPatientService(BasePatientService):
                 "version": version or "v1",
                 "method": method or "kiosk"
             }
+
+        save_patient_to_db(patient, db_path=self.db_path)
+        return patient
+
+    def record_ayush_intake(
+        self,
+        patient_id: str,
+        ayush_data: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Records patient-reported AYUSH intake parameters (Nadi, Mutra, Mala, Jihwa).
+        Guarantees patient isolation: never alters other patient records.
+        Does NOT infer Ayurvedic diagnoses or dosha imbalances.
+        """
+        patient = self._patients.get(patient_id)
+        if not patient:
+            from app.db.sqlite_db import load_patient_from_db
+            patient = load_patient_from_db(patient_id, db_path=self.db_path)
+            if patient:
+                self._patients[patient_id] = patient
+
+        if not patient:
+            now_time = datetime.now().strftime("%I:%M %p")
+            patient = {
+                "id": patient_id,
+                "queue_token": f"OPD-{104 + len(self._patients)}",
+                "name": "Intake Patient",
+                "age": 30,
+                "gender": "Other",
+                "phone": "+91 99000 00000",
+                "department": "General Medicine",
+                "triage_priority": "Routine",
+                "chief_complaint": "Routine medical intake",
+                "intake_status": "Registered",
+                "red_flag_detected": False,
+                "red_flag_note": None,
+                "language": "Hindi / English",
+                "arrived_at": now_time,
+                "verification_status": "Pending Review",
+                "doctor_notes": None,
+                "consent": {
+                    "given": False,
+                    "timestamp": None,
+                    "version": "v1",
+                    "method": "kiosk"
+                },
+                "demographics": {
+                    "name": "Intake Patient",
+                    "age": 30,
+                    "gender": "Other",
+                    "blood_group": "Unknown",
+                    "arrived_at": now_time,
+                    "consultation_type": "New Kiosk Registration",
+                    "ayush_mode": "Allopathic Standard (AYUSH Inactive)"
+                },
+                "triage": {
+                    "priority": "Routine",
+                    "vitals_summary": "Pending consultation assessment",
+                    "triage_nurse": "Station 1"
+                },
+                "structured_history": {"hpi": {}, "past_medical_history": [], "current_medications": [], "allergies": []},
+                "medications": [],
+                "labs": [],
+                "timeline": []
+            }
+            self._patients[patient_id] = patient
+
+        if "ayush" not in patient or not isinstance(patient["ayush"], dict):
+            patient["ayush"] = {}
+
+        ayush_dict = patient["ayush"]
+        for param in ["nadi", "mutra", "mala", "jihwa"]:
+            if param in ayush_data:
+                param_val = ayush_data[param]
+                if isinstance(param_val, dict):
+                    val = param_val.get("value") or "Not provided"
+                    src = param_val.get("source") or "patient-reported"
+                else:
+                    val = str(param_val).strip() if param_val else "Not provided"
+                    src = "patient-reported"
+                ayush_dict[param] = {"value": val, "source": src}
+            elif param not in ayush_dict:
+                ayush_dict[param] = {"value": "Not provided", "source": "patient-reported"}
+
+        ayush_dict["completed_at"] = datetime.now().isoformat()
+
+        if "demographics" in patient and isinstance(patient["demographics"], dict):
+            patient["demographics"]["ayush_mode"] = "AYUSH Kiosk Intake Active"
+
+        existing_timeline_ids = [ev.get("id") for ev in patient.get("timeline", [])]
+        tl_id = f"TL-AYUSH-{patient_id}"
+        if tl_id not in existing_timeline_ids:
+            now_dt = datetime.now()
+            patient.setdefault("timeline", []).append({
+                "id": tl_id,
+                "patient_id": patient_id,
+                "type": "ayush_intake_completed",
+                "category": "AYUSH Intake",
+                "title": "AYUSH intake recorded",
+                "description": "Patient completed optional AYUSH intake (Nadi, Mutra, Mala, Jihwa)",
+                "timestamp": now_dt.isoformat(),
+                "date": now_dt.strftime("%d %b %Y"),
+                "time": now_dt.strftime("%I:%M %p"),
+                "source": "patient-reported"
+            })
 
         save_patient_to_db(patient, db_path=self.db_path)
         return patient
@@ -883,6 +1003,15 @@ class StatefulPatientService(BasePatientService):
             if has_timeline_consent:
                 record["consent"]["given"] = True
 
+        # Ensure AYUSH record is present
+        if "ayush" not in record or not isinstance(record["ayush"], dict):
+            record["ayush"] = {
+                "nadi": {"value": "Not provided", "source": "patient-reported"},
+                "mutra": {"value": "Not provided", "source": "patient-reported"},
+                "mala": {"value": "Not provided", "source": "patient-reported"},
+                "jihwa": {"value": "Not provided", "source": "patient-reported"}
+            }
+
         # Dynamic documents linkage from document_service (strictly isolated by patient_id)
         try:
             from app.services.base_document_service import document_service
@@ -947,6 +1076,10 @@ class StatefulPatientService(BasePatientService):
         # Update allergies if provided
         if "allergies" in update_data and isinstance(update_data["allergies"], list):
             struct_hist["allergies"] = update_data["allergies"]
+
+        # Update AYUSH data if provided
+        if "ayush" in update_data and update_data["ayush"] is not None and isinstance(update_data["ayush"], dict):
+            self.record_ayush_intake(patient_id, update_data["ayush"])
 
         # Helper for medication normalization
         def _norm_med_name(name: str) -> str:

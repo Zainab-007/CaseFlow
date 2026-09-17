@@ -21,7 +21,7 @@ export default function LanguagePage() {
 
   const handleContinue = () => {
     patientService.setPatientLanguage(selectedLang);
-    navigate('/patient/interview');
+    navigate('/patient/ayush');
   };
 
   return (

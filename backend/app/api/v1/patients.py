@@ -59,6 +59,18 @@ async def record_patient_consent(patient_id: str, consent_data: ConsentRequest):
     return updated
 
 
+@router.post("/{patient_id}/ayush")
+async def record_ayush_intake(patient_id: str, ayush_data: dict):
+    """
+    Record optional patient-reported AYUSH intake observations (Nadi, Mutra, Mala, Jihwa).
+    Does NOT infer Ayurvedic diagnosis or dosha imbalance.
+    """
+    updated = patient_service.record_ayush_intake(patient_id=patient_id, ayush_data=ayush_data)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Patient not found")
+    return updated
+
+
 @router.put("/{patient_id}")
 async def update_patient_intake(patient_id: str, update_data: PatientUpdate):
     """

@@ -9,6 +9,7 @@ import WelcomePage from '../pages/patient/WelcomePage';
 import RegisterPage from '../pages/patient/RegisterPage';
 import ConsentPage from '../pages/patient/ConsentPage';
 import LanguagePage from '../pages/patient/LanguagePage';
+import AyushIntakePage from '../pages/patient/AyushIntakePage';
 import InterviewPage from '../pages/patient/InterviewPage';
 import DocumentsPage from '../pages/patient/DocumentsPage';
 import ReviewPage from '../pages/patient/ReviewPage';
@@ -30,6 +31,7 @@ export default function AppRoutes() {
           <Route path="register" element={<RegisterPage />} />
           <Route path="consent" element={<ConsentPage />} />
           <Route path="language" element={<LanguagePage />} />
+          <Route path="ayush" element={<AyushIntakePage />} />
           <Route path="interview" element={<InterviewPage />} />
           <Route path="documents" element={<DocumentsPage />} />
           <Route path="review" element={<ReviewPage />} />
