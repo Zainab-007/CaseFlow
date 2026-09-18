@@ -11,7 +11,8 @@ from app.schemas.patient import (
     PatientCreate,
     PatientUpdate,
     VerificationUpdate,
-    ConsentRequest
+    ConsentRequest,
+    RedFlagStatusUpdate
 )
 from app.services.base_patient_service import patient_service
 
@@ -68,6 +69,36 @@ async def record_ayush_intake(patient_id: str, ayush_data: dict):
     updated = patient_service.record_ayush_intake(patient_id=patient_id, ayush_data=ayush_data)
     if not updated:
         raise HTTPException(status_code=404, detail="Patient not found")
+    return updated
+
+
+@router.patch("/{patient_id}/red-flags/{red_flag_id}")
+async def update_red_flag_lifecycle(
+    patient_id: str,
+    red_flag_id: str,
+    payload: RedFlagStatusUpdate
+):
+    """
+    Updates a red flag's lifecycle status (ACTIVE, REVIEWED, RESOLVED).
+    Guarantees strict patient isolation and audit trail persistence.
+    """
+    status = payload.status.strip().upper()
+    if status not in ("ACTIVE", "REVIEWED", "RESOLVED"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid red flag status '{payload.status}'. Must be one of: ACTIVE, REVIEWED, RESOLVED"
+        )
+
+    updated = patient_service.update_red_flag_status(
+        patient_id=patient_id,
+        red_flag_id=red_flag_id,
+        status=status,
+        doctor_id=payload.doctor_id
+    )
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Patient not found")
+    if isinstance(updated, dict) and "error" in updated:
+        raise HTTPException(status_code=404, detail=updated["error"])
     return updated
 
 

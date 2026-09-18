@@ -52,11 +52,31 @@ let clientFallbackPatients = {
       'productive cough accompanied by progressive exertional dyspnea (NYHA Class II). Denies fever, chest pain, or hemoptysis.',
     red_flag: {
       detected: true,
+      id: 'RF-CF-2026-001-1',
+      status: 'ACTIVE',
       title: 'Exertional Breathlessness in Hypertensive Patient (NYHA II/III)',
       rule_trigger: 'Rule #C12: Dyspnea on exertion + Known Cardiac/HTN History',
       nlp_trigger: 'NLP pattern: Patient mentions difficulty sleeping flat without 2 pillows',
       physician_action: 'Immediate clinical chest auscultation and 12-lead ECG advised before OPD sign-off'
     },
+    red_flags: [
+      {
+        id: 'RF-CF-2026-001-1',
+        type: 'cardiac_respiratory_alert',
+        message: 'Exertional Breathlessness in Hypertensive Patient (NYHA II/III)',
+        severity: 'High',
+        status: 'ACTIVE',
+        detected_at: '2026-09-14T10:15:00',
+        reviewed_at: null,
+        resolved_at: null,
+        reviewed_by: null,
+        resolved_by: null,
+        title: 'Exertional Breathlessness in Hypertensive Patient (NYHA II/III)',
+        rule_trigger: 'Rule #C12: Dyspnea on exertion + Known Cardiac/HTN History',
+        nlp_trigger: 'NLP pattern: Patient mentions difficulty sleeping flat without 2 pillows',
+        physician_action: 'Immediate clinical chest auscultation and 12-lead ECG advised before OPD sign-off'
+      }
+    ],
     structured_history: {
       hpi: {
         onset: 'Gradual onset over 10 days',
@@ -281,11 +301,31 @@ let clientFallbackPatients = {
       'accompanied by cold sweating starting 2 hours prior to arrival. Urgent physician evaluation and STAT 12-lead ECG indicated.',
     red_flag: {
       detected: true,
+      id: 'RF-CF-2026-004-1',
+      status: 'ACTIVE',
       title: 'Suspected Acute Coronary Syndrome / High-Risk Chest Pain',
       rule_trigger: 'Rule #CARD01: Retrosternal pressure + Radiation + Diaphoresis',
       nlp_trigger: 'Patient describes heavy crushing retrosternal weight with sweating',
       physician_action: 'STAT 12-lead ECG within 10 minutes, sublingual nitrate, emergency room transfer'
     },
+    red_flags: [
+      {
+        id: 'RF-CF-2026-004-1',
+        type: 'acute_coronary_syndrome',
+        message: 'Suspected Acute Coronary Syndrome / High-Risk Chest Pain',
+        severity: 'Critical',
+        status: 'ACTIVE',
+        detected_at: '2026-09-14T10:48:00',
+        reviewed_at: null,
+        resolved_at: null,
+        reviewed_by: null,
+        resolved_by: null,
+        title: 'Suspected Acute Coronary Syndrome / High-Risk Chest Pain',
+        rule_trigger: 'Rule #CARD01: Retrosternal pressure + Radiation + Diaphoresis',
+        nlp_trigger: 'Patient describes heavy crushing retrosternal weight with sweating',
+        physician_action: 'STAT 12-lead ECG within 10 minutes, sublingual nitrate, emergency room transfer'
+      }
+    ],
     structured_history: {
       hpi: {
         onset: 'Sudden onset 2 hours ago while climbing stairs',
@@ -330,6 +370,92 @@ Object.values(clientFallbackPatients).forEach(p => {
 });
 
 const DEMO_PATIENT_IDS = ['CF-2026-001', 'CF-2026-002', 'CF-2026-003', 'CF-2026-004'];
+
+// ============================================================================
+// Canonical Red-Flag Lifecycle helpers (SIH26047)
+// Lifecycle: ACTIVE -> REVIEWED -> RESOLVED
+// Single source of truth for dashboard stats AND queue rows — they cannot
+// disagree because both derive from these functions. Historical (REVIEWED /
+// RESOLVED) records are preserved, never deleted.
+// ============================================================================
+
+export const RED_FLAG_STATUSES = { ACTIVE: 'ACTIVE', REVIEWED: 'REVIEWED', RESOLVED: 'RESOLVED' };
+
+/**
+ * True if a single red-flag record is currently ACTIVE (not REVIEWED/RESOLVED).
+ * Legacy records without a status field default to ACTIVE.
+ */
+export function redFlagIsActive(rf) {
+  if (!rf || typeof rf !== 'object') return false;
+  return String(rf.status || 'ACTIVE').trim().toUpperCase() === RED_FLAG_STATUSES.ACTIVE;
+}
+
+/**
+ * Canonical lifecycle-aware derivation for a patient record.
+ * Normalizes legacy shapes (red_flag / red_flag_detected / red_flags) without
+ * mutating or deleting any historical lifecycle records.
+ * Returns { hasActive, redFlags, activeCount, reviewedCount, resolvedCount }.
+ */
+export function deriveRedFlagState(patient) {
+  if (!patient || typeof patient !== 'object') {
+    return { hasActive: false, redFlags: [], activeCount: 0, reviewedCount: 0, resolvedCount: 0 };
+  }
+
+  // 1. Canonical historical list
+  let redFlags = [];
+  const rawFlags = patient.red_flags;
+  if (Array.isArray(rawFlags)) {
+    redFlags = rawFlags.filter((rf) => rf && typeof rf === 'object');
+  } else if (rawFlags && typeof rawFlags === 'object') {
+    redFlags = [rawFlags];
+  }
+
+  // 2. Legacy normalization: synthesize a historical record from legacy
+  //    red_flag / red_flag_detected fields ONLY when no list exists.
+  if (redFlags.length === 0) {
+    const legacyRf = patient.red_flag;
+    if (legacyRf && typeof legacyRf === 'object' && legacyRf.detected) {
+      redFlags = [{
+        id: legacyRf.id || `RF-${patient.id || 'UNKNOWN'}-1`,
+        type: legacyRf.type || 'clinical_safety_alert',
+        message: legacyRf.title || patient.red_flag_note || 'Clinical Alert',
+        title: legacyRf.title || patient.red_flag_note || 'Clinical Alert',
+        severity: legacyRf.severity || 'High',
+        status: String(legacyRf.status || 'ACTIVE').toUpperCase(),
+        detected_at: legacyRf.detected_at || patient.arrived_at || null,
+        reviewed_at: legacyRf.reviewed_at || null,
+        resolved_at: legacyRf.resolved_at || null,
+        reviewed_by: legacyRf.reviewed_by || null,
+        resolved_by: legacyRf.resolved_by || null,
+        rule_trigger: legacyRf.rule_trigger || null,
+        nlp_trigger: legacyRf.nlp_trigger || null,
+        physician_action: legacyRf.physician_action || null
+      }];
+    } else if (patient.red_flag_detected) {
+      redFlags = [{
+        id: `RF-${patient.id || 'UNKNOWN'}-1`,
+        type: 'clinical_safety_alert',
+        message: patient.red_flag_note || 'Clinical Alert',
+        title: patient.red_flag_note || 'Clinical Alert',
+        severity: 'High',
+        status: RED_FLAG_STATUSES.ACTIVE,
+        detected_at: patient.arrived_at || null
+      }];
+    }
+  }
+
+  const activeCount = redFlags.filter(redFlagIsActive).length;
+  const reviewedCount = redFlags.filter((rf) => String(rf.status || '').toUpperCase() === RED_FLAG_STATUSES.REVIEWED).length;
+  const resolvedCount = redFlags.filter((rf) => String(rf.status || '').toUpperCase() === RED_FLAG_STATUSES.RESOLVED).length;
+
+  return {
+    hasActive: activeCount > 0,
+    redFlags,
+    activeCount,
+    reviewedCount,
+    resolvedCount
+  };
+}
 
 export const patientService = {
   isDemoPatient(id) {
@@ -493,14 +619,17 @@ export const patientService = {
   },
 
   /**
-   * Canonical queue statistics calculator
-   * Guarantees 100% agreement between header counters, metric cards, and patient table.
+   * Canonical queue statistics calculator (lifecycle-aware)
+   * Guarantees 100% agreement between header counters, metric cards, and patient table:
+   * all of them derive from the same canonical deriveRedFlagState() helper.
+   * RESOLVED / REVIEWED red flags are NOT counted as active red flags,
+   * but remain persisted as historical lifecycle records.
    */
   computeQueueStats(queue = []) {
     const list = Array.isArray(queue) ? queue : [];
     return {
       total: list.length,
-      redFlags: list.filter((p) => Boolean(p.red_flag_detected)).length,
+      redFlags: list.filter((p) => deriveRedFlagState(p).hasActive).length,
       urgent: list.filter((p) => (p.triage_priority || '').toUpperCase() === 'URGENT').length,
       verified: list.filter((p) => (p.verification_status || '').toLowerCase() === 'verified').length,
       pending: list.filter((p) => (p.verification_status || '').toLowerCase() !== 'verified').length
@@ -521,24 +650,30 @@ export const patientService = {
       console.warn('Backend queue fetch failed, using client fallback:', err.message);
     }
 
-    return Object.values(clientFallbackPatients).map((p) => ({
-      id: p.id,
-      queue_token: p.queue_token,
-      name: p.name,
-      age: p.age,
-      gender: p.gender,
-      abha_id: p.abha_id,
-      department: p.department,
-      triage_priority: p.triage_priority,
-      chief_complaint: p.chief_complaint,
-      intake_status: p.intake_status,
-      red_flag_detected: p.red_flag_detected,
-      red_flag_note: p.red_flag_note,
-      language: p.language,
-      arrived_at: p.arrived_at,
-      verification_status: p.verification_status,
-      consent: p.consent || { given: false, timestamp: null, version: 'v1', method: 'kiosk' }
-    }));
+    return Object.values(clientFallbackPatients).map((p) => {
+      // Same canonical lifecycle-aware derivation as computeQueueStats()
+      const rfState = deriveRedFlagState(p);
+
+      return {
+        id: p.id,
+        queue_token: p.queue_token,
+        name: p.name,
+        age: p.age,
+        gender: p.gender,
+        abha_id: p.abha_id,
+        department: p.department,
+        triage_priority: p.triage_priority,
+        chief_complaint: p.chief_complaint,
+        intake_status: p.intake_status,
+        red_flag_detected: rfState.hasActive,
+        red_flag_note: p.red_flag_note,
+        red_flags: rfState.redFlags,
+        language: p.language,
+        arrived_at: p.arrived_at,
+        verification_status: p.verification_status,
+        consent: p.consent || { given: false, timestamp: null, version: 'v1', method: 'kiosk' }
+      };
+    });
   },
 
   /**
@@ -1061,6 +1196,125 @@ export const patientService = {
       });
     }
 
+    return p;
+  },
+
+  /**
+   * Update the lifecycle state of a specific red flag (ACTIVE, REVIEWED, RESOLVED).
+   */
+  async updateRedFlagStatus(patientId, redFlagId, status, doctorId = 'Dr. S. K. Mehta (Reg: MCI-48201)') {
+    const targetId = patientId || this.getCurrentPatientId();
+    if (!targetId || !redFlagId) return null;
+    const normStatus = (status || '').trim().toUpperCase();
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/${targetId}/red-flags/${redFlagId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: normStatus, doctor_id: doctorId })
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        clientFallbackPatients[targetId] = updated;
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('caseflow-queue-updated'));
+        }
+        return updated;
+      }
+
+      // Backend reached but rejected request (404, 400, 500, etc.)
+      // The frontend must NOT silently present a successful lifecycle update when backend returns error.
+      const errDetail = await res.json().catch(() => ({}));
+      const errMsg = errDetail?.detail || `HTTP ${res.status}: Failed to update red flag status`;
+      console.error(`Backend updateRedFlagStatus rejected [${res.status}]:`, errMsg);
+      throw new Error(errMsg);
+    } catch (err) {
+      if (err.message && (err.message.startsWith('HTTP ') || err.message.includes('not found') || err.message.includes('Invalid'))) {
+        throw err;
+      }
+      console.warn('Backend updateRedFlagStatus network error, using client fallback:', err.message);
+    }
+
+    // Client fallback
+    let p = clientFallbackPatients[targetId];
+    if (!p) return null;
+
+    if (!Array.isArray(p.red_flags)) {
+      p.red_flags = [];
+    }
+
+    let targetRf = p.red_flags.find((rf) => rf.id === redFlagId);
+    if (!targetRf && (p.red_flag?.id === redFlagId || p.red_flag_detected)) {
+      targetRf = {
+        id: redFlagId,
+        type: 'clinical_safety_alert',
+        message: p.red_flag?.title || p.red_flag_note || 'High Risk Clinical Symptom Flagged',
+        severity: 'High',
+        status: 'ACTIVE',
+        detected_at: p.arrived_at || new Date().toISOString(),
+        title: p.red_flag?.title || p.red_flag_note || 'High Risk Clinical Symptom Flagged',
+        rule_trigger: p.red_flag?.rule_trigger || 'Safety Rule Triggered',
+        nlp_trigger: p.red_flag?.nlp_trigger || p.red_flag_note,
+        physician_action: p.red_flag?.physician_action || 'Immediate physician evaluation required'
+      };
+      p.red_flags.push(targetRf);
+    }
+
+    if (!targetRf) return null;
+
+    const prevStatus = targetRf.status || 'ACTIVE';
+    const nowIso = new Date().toISOString();
+    const nowDt = new Date();
+
+    targetRf.status = normStatus;
+    if (normStatus === 'REVIEWED') {
+      targetRf.reviewed_at = nowIso;
+      targetRf.reviewed_by = doctorId;
+    } else if (normStatus === 'RESOLVED') {
+      targetRf.resolved_at = nowIso;
+      targetRf.resolved_by = doctorId;
+      if (!targetRf.reviewed_at) {
+        targetRf.reviewed_at = nowIso;
+        targetRf.reviewed_by = doctorId;
+      }
+    } else if (normStatus === 'ACTIVE') {
+      targetRf.reviewed_at = null;
+      targetRf.reviewed_by = null;
+      targetRf.resolved_at = null;
+      targetRf.resolved_by = null;
+    }
+
+    if (p.red_flag && (p.red_flag.id === redFlagId || p.red_flags.length === 1)) {
+      p.red_flag.status = normStatus;
+    }
+
+    p.red_flag_detected = p.red_flags.some((rf) => (rf.status || 'ACTIVE').toUpperCase() === 'ACTIVE');
+
+    if (prevStatus !== normStatus) {
+      if (!p.timeline) p.timeline = [];
+      const title = normStatus === 'REVIEWED' ? 'Red flag reviewed' : (normStatus === 'RESOLVED' ? 'Red flag resolved' : 'Red flag reactivated');
+      p.timeline.push({
+        id: `TL-RF-${redFlagId}-${normStatus}-${Date.now().toString(36).toUpperCase()}`,
+        patient_id: targetId,
+        type: `red_flag_${normStatus.toLowerCase()}`,
+        category: 'Safety Alert',
+        source: 'doctor',
+        title,
+        description: `Clinical safety alert '${targetRf.title || targetRf.message}' status changed from ${prevStatus} to ${normStatus} by ${doctorId}.`,
+        timestamp: nowIso,
+        date: nowDt.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+        time: nowDt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        red_flag_id: redFlagId,
+        previous_status: prevStatus,
+        new_status: normStatus,
+        doctor: doctorId,
+        verified_by: doctorId
+      });
+    }
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('caseflow-queue-updated'));
+    }
     return p;
   },
 

@@ -54,6 +54,12 @@ class PatientQueueItem(BaseModel):
     arrived_at: str
     verification_status: str = "Pending Review"
     consent: Optional[PatientConsent] = None
+    red_flags: Optional[List[dict]] = None
+
+
+class RedFlagStatusUpdate(BaseModel):
+    status: str = Field(..., description="Target lifecycle status: ACTIVE, REVIEWED, RESOLVED", example="REVIEWED")
+    doctor_id: Optional[str] = Field(None, description="Doctor identifier or name", example="Dr. S. K. Mehta (Reg: MCI-48201)")
 
 
 class VerificationUpdate(BaseModel):

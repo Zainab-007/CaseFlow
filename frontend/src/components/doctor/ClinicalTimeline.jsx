@@ -1,6 +1,6 @@
 import React from 'react';
 import Badge from '../ui/Badge';
-import { Calendar, FileText, Activity, Stethoscope, Clock, Pill } from 'lucide-react';
+import { Calendar, FileText, Activity, Stethoscope, Clock, Pill, ShieldAlert } from 'lucide-react';
 
 /**
  * Chronological Clinical Timeline component.
@@ -9,6 +9,9 @@ import { Calendar, FileText, Activity, Stethoscope, Clock, Pill } from 'lucide-r
 export default function ClinicalTimeline({ events = [] }) {
   const getCategoryIcon = (category) => {
     switch (category?.toLowerCase()) {
+      case 'safety alert':
+      case 'clinical alert':
+        return ShieldAlert;
       case 'intake':
         return Activity;
       case 'lab investigation':

@@ -2,6 +2,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import Badge from '../ui/Badge';
 import Button from '../ui/Button';
+import { deriveRedFlagState } from '../../services/patientService';
 import { Clock, ShieldAlert, ChevronRight, User, AlertCircle } from 'lucide-react';
 
 /**
@@ -87,9 +88,10 @@ export default function PatientQueueTable({ patients = [] }) {
                     </Badge>
                   </td>
 
-                  {/* Red Flag Indicator */}
+                  {/* Red Flag Indicator — lifecycle-aware: only ACTIVE flags show "Flagged";
+                      REVIEWED/RESOLVED history stays in Patient Detail */}
                   <td className="py-4 px-4 whitespace-nowrap">
-                    {patient.red_flag_detected ? (
+                    {deriveRedFlagState(patient).hasActive ? (
                       <span className="inline-flex items-center gap-1 text-xs font-bold text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md">
                         <ShieldAlert className="w-3.5 h-3.5 text-rose-600" />
                         Flagged

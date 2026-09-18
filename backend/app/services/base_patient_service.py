@@ -77,12 +77,114 @@ class BasePatientService(ABC):
         """Records patient-reported AYUSH intake observations."""
         pass
 
+    @abstractmethod
+    def update_red_flag_status(
+        self,
+        patient_id: str,
+        red_flag_id: str,
+        status: str,
+        doctor_id: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
+        """Updates the lifecycle state of a red flag and appends an audit event."""
+        pass
+
 
 class StatefulPatientService(BasePatientService):
     """
     In-memory stateful repository ensuring complete patient data isolation.
     Every patient record is keyed by unique patient_id.
     """
+
+    # ------------------------------------------------------------------
+    # Canonical Red-Flag Lifecycle helpers (SIH26047)
+    # Lifecycle: ACTIVE -> REVIEWED -> RESOLVED
+    # These are the SINGLE source of truth for dashboard stats, queue rows,
+    # and patient detail — they must never disagree with each other.
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def red_flag_has_active(rf: Any) -> bool:
+        """True if a single red-flag record is currently ACTIVE (not REVIEWED/RESOLVED).
+        Legacy records without a status field default to ACTIVE."""
+        if not isinstance(rf, dict):
+            return False
+        return str(rf.get("status") or "ACTIVE").strip().upper() == "ACTIVE"
+
+    @classmethod
+    def derive_red_flag_state(cls, patient: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Derive the canonical red-flag lifecycle state for a patient record.
+        Normalizes legacy shapes (red_flag / red_flag_detected / red_flags) without
+        mutating or deleting any historical lifecycle records.
+
+        Returns: {
+          has_active: bool       — currently flagged (ACTIVE red flag exists)
+          red_flags: list        — full historical list, lifecycle statuses preserved
+          active_count: int
+          reviewed_count: int
+          resolved_count: int
+        }
+        """
+        # 1. Canonical historical list
+        red_flags: List[Dict[str, Any]] = []
+        raw_flags = patient.get("red_flags")
+        if isinstance(raw_flags, list):
+            red_flags = [rf for rf in raw_flags if isinstance(rf, dict)]
+        elif isinstance(raw_flags, dict):
+            red_flags = [raw_flags]
+
+        # 2. Legacy normalization: synthesize a historical record from legacy
+        #    red_flag / red_flag_detected fields ONLY when no list exists.
+        #    Legacy records have no lifecycle status, so they are ACTIVE by definition.
+        if not red_flags:
+            legacy_rf = patient.get("red_flag")
+            legacy_detected = bool(patient.get("red_flag_detected"))
+            if isinstance(legacy_rf, dict) and legacy_rf.get("detected"):
+                red_flags = [{
+                    "id": legacy_rf.get("id") or f"RF-{patient.get('id', 'UNKNOWN')}-1",
+                    "type": legacy_rf.get("type", "clinical_safety_alert"),
+                    "message": legacy_rf.get("title") or patient.get("red_flag_note") or "Clinical Alert",
+                    "title": legacy_rf.get("title") or patient.get("red_flag_note") or "Clinical Alert",
+                    "severity": legacy_rf.get("severity", "High"),
+                    "status": str(legacy_rf.get("status") or "ACTIVE").upper(),
+                    "detected_at": legacy_rf.get("detected_at") or patient.get("arrived_at"),
+                    "reviewed_at": legacy_rf.get("reviewed_at"),
+                    "resolved_at": legacy_rf.get("resolved_at"),
+                    "reviewed_by": legacy_rf.get("reviewed_by"),
+                    "resolved_by": legacy_rf.get("resolved_by"),
+                    "rule_trigger": legacy_rf.get("rule_trigger"),
+                    "nlp_trigger": legacy_rf.get("nlp_trigger"),
+                    "physician_action": legacy_rf.get("physician_action")
+                }]
+            elif legacy_detected:
+                red_flags = [{
+                    "id": f"RF-{patient.get('id', 'UNKNOWN')}-1",
+                    "message": patient.get("red_flag_note") or "Clinical Alert",
+                    "title": patient.get("red_flag_note") or "Clinical Alert",
+                    "severity": "High",
+                    "status": "ACTIVE",
+                    "rule_trigger": "Legacy safety screen"
+                }]
+
+        active_count = sum(1 for rf in red_flags if cls.red_flag_has_active(rf))
+        reviewed_count = sum(1 for rf in red_flags if str(rf.get("status") or "").upper() == "REVIEWED")
+        resolved_count = sum(1 for rf in red_flags if str(rf.get("status") or "").upper() == "RESOLVED")
+
+        return {
+            "has_active": active_count > 0,
+            "red_flags": red_flags,
+            "active_count": active_count,
+            "reviewed_count": reviewed_count,
+            "resolved_count": resolved_count
+        }
+
+    def _ensure_red_flags_normalized(self, patient: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Ensure the canonical red_flags list exists on the record, preserving all
+        historical lifecycle statuses (REVIEWED/RESOLVED records are NEVER deleted).
+        Backfills a legacy record by materializing its derived historical entry."""
+        state = self.derive_red_flag_state(patient)
+        patient["red_flags"] = state["red_flags"]
+        return patient["red_flags"]
 
     def __init__(self, db_path: Optional[str] = None):
         self.db_path = db_path
@@ -139,11 +241,31 @@ class StatefulPatientService(BasePatientService):
             ),
             "red_flag": {
                 "detected": True,
+                "id": "RF-CF-2026-001-1",
+                "status": "ACTIVE",
                 "title": "Exertional Breathlessness in Hypertensive Patient (NYHA II/III)",
                 "rule_trigger": "Rule #C12: Dyspnea on exertion + Known Cardiac/HTN History",
                 "nlp_trigger": "NLP pattern: Patient mentions difficulty sleeping flat without 2 pillows (orthopnea equivalent)",
                 "physician_action": "Immediate clinical chest auscultation and 12-lead ECG advised before OPD sign-off"
             },
+            "red_flags": [
+                {
+                    "id": "RF-CF-2026-001-1",
+                    "type": "cardiac_respiratory_alert",
+                    "message": "Exertional Breathlessness in Hypertensive Patient (NYHA II/III)",
+                    "severity": "High",
+                    "status": "ACTIVE",
+                    "detected_at": "2026-09-14T10:15:00",
+                    "reviewed_at": None,
+                    "resolved_at": None,
+                    "reviewed_by": None,
+                    "resolved_by": None,
+                    "title": "Exertional Breathlessness in Hypertensive Patient (NYHA II/III)",
+                    "rule_trigger": "Rule #C12: Dyspnea on exertion + Known Cardiac/HTN History",
+                    "nlp_trigger": "NLP pattern: Patient mentions difficulty sleeping flat without 2 pillows (orthopnea equivalent)",
+                    "physician_action": "Immediate clinical chest auscultation and 12-lead ECG advised before OPD sign-off"
+                }
+            ],
             "structured_history": {
                 "hpi": {
                     "onset": "Gradual onset over 10 days",
@@ -232,6 +354,7 @@ class StatefulPatientService(BasePatientService):
                 "nlp_trigger": "Patient denies black stools, blood in vomitus, or severe nocturnal pain",
                 "physician_action": "Standard outpatient gastrointestinal evaluation and dietary guidance"
             },
+            "red_flags": [],
             "structured_history": {
                 "hpi": {
                     "onset": "Gradual over 3 weeks",
@@ -316,6 +439,7 @@ class StatefulPatientService(BasePatientService):
                 "nlp_trigger": "No altered sensorium, stiff neck, or petechial rash",
                 "physician_action": "Oropharyngeal examination and symptomatic relief"
             },
+            "red_flags": [],
             "structured_history": {
                 "hpi": {
                     "onset": "Acute onset 4 days ago",
@@ -396,11 +520,31 @@ class StatefulPatientService(BasePatientService):
             ),
             "red_flag": {
                 "detected": True,
+                "id": "RF-CF-2026-004-1",
+                "status": "ACTIVE",
                 "title": "Suspected Acute Coronary Syndrome / High-Risk Chest Pain",
                 "rule_trigger": "Rule #CARD01: Retrosternal pressure + Radiation + Diaphoresis",
                 "nlp_trigger": "Patient describes 'band-like tightness crushing chest like heavy weight' with cold sweats",
                 "physician_action": "STAT 12-lead ECG within 10 minutes, sublingual nitrate availability, and emergency room transfer"
             },
+            "red_flags": [
+                {
+                    "id": "RF-CF-2026-004-1",
+                    "type": "acute_coronary_syndrome",
+                    "message": "Suspected Acute Coronary Syndrome / High-Risk Chest Pain",
+                    "severity": "Critical",
+                    "status": "ACTIVE",
+                    "detected_at": "2026-09-14T10:45:00",
+                    "reviewed_at": None,
+                    "resolved_at": None,
+                    "reviewed_by": None,
+                    "resolved_by": None,
+                    "title": "Suspected Acute Coronary Syndrome / High-Risk Chest Pain",
+                    "rule_trigger": "Rule #CARD01: Retrosternal pressure + Radiation + Diaphoresis",
+                    "nlp_trigger": "Patient describes 'band-like tightness crushing chest like heavy weight' with cold sweats",
+                    "physician_action": "STAT 12-lead ECG within 10 minutes, sublingual nitrate availability, and emergency room transfer"
+                }
+            ],
             "structured_history": {
                 "hpi": {
                     "onset": "Sudden onset 2 hours ago while climbing stairs",
@@ -448,6 +592,27 @@ class StatefulPatientService(BasePatientService):
                 }
                 self._patients[p["id"]] = p
                 save_patient_to_db(p, db_path=self.db_path)
+            else:
+                existing_p = self._patients[p["id"]]
+                if ("red_flags" not in existing_p or not isinstance(existing_p.get("red_flags"), list) or existing_p.get("red_flags") is None) and p.get("red_flags"):
+                    # Legacy backfill: materialize historical red_flags from legacy fields.
+                    # Preserve the record's existing lifecycle status (never resurrect a
+                    # previously REVIEWED/RESOLVED flag back to ACTIVE just because of a restart).
+                    legacy_status = str(
+                        (existing_p.get("red_flag") or {}).get("status") or "ACTIVE"
+                    ).upper()
+                    backfilled = []
+                    for rf in p["red_flags"]:
+                        rf_copy = dict(rf)
+                        rf_copy["status"] = legacy_status
+                        backfilled.append(rf_copy)
+                    existing_p["red_flags"] = backfilled
+                    if "red_flag" in p and isinstance(p["red_flag"], dict):
+                        existing_p.setdefault("red_flag", {}).update(p["red_flag"])
+                        existing_p["red_flag"]["status"] = legacy_status
+                    # Persist derived overall active state from the canonical helper
+                    existing_p["red_flag_detected"] = self.derive_red_flag_state(existing_p)["has_active"]
+                    save_patient_to_db(existing_p, db_path=self.db_path)
 
     async def create_patient(self, patient_data: Dict[str, Any]) -> Dict[str, Any]:
         """Creates a new patient record with a unique ID and full clinical profile."""
@@ -521,6 +686,7 @@ class StatefulPatientService(BasePatientService):
                 "nlp_trigger": "None",
                 "physician_action": "Standard clinical consultation"
             },
+            "red_flags": [],
             "structured_history": {
                 "hpi": {
                     "onset": "Recent",
@@ -768,6 +934,118 @@ class StatefulPatientService(BasePatientService):
         save_patient_to_db(patient, db_path=self.db_path)
         return patient
 
+    def update_red_flag_status(
+        self,
+        patient_id: str,
+        red_flag_id: str,
+        status: str,
+        doctor_id: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Updates the lifecycle state of a specific red flag for a specific patient.
+        Guarantees patient isolation: Patient A cannot modify Patient B's red flag.
+        Ensures auditability: generates exactly one timeline event per transition.
+        Persists to SQLite.
+        """
+        patient = self._patients.get(patient_id)
+        if not patient:
+            from app.db.sqlite_db import load_patient_from_db
+            patient = load_patient_from_db(patient_id, db_path=self.db_path)
+            if patient:
+                self._patients[patient_id] = patient
+        if not patient:
+            return None
+
+        # Ensure red_flags list is populated via canonical normalization
+        # (legacy records backfilled without losing any lifecycle history)
+        red_flags_list = self._ensure_red_flags_normalized(patient)
+
+        # Find matching red flag in this patient's list (strict patient isolation)
+        target_rf = None
+        for rf in red_flags_list:
+            if rf.get("id") == red_flag_id:
+                target_rf = rf
+                break
+
+        if not target_rf:
+            return {"error": f"Red flag '{red_flag_id}' not found for patient '{patient_id}'"}
+
+        prev_status = target_rf.get("status", "ACTIVE")
+        now_dt = datetime.now()
+        now_iso = now_dt.isoformat()
+        doctor_name = doctor_id or "Dr. S. K. Mehta (Reg: MCI-48201)"
+
+        # Perform transition
+        target_rf["status"] = status
+        if status == "REVIEWED":
+            target_rf["reviewed_at"] = now_iso
+            target_rf["reviewed_by"] = doctor_name
+        elif status == "RESOLVED":
+            target_rf["resolved_at"] = now_iso
+            target_rf["resolved_by"] = doctor_name
+            if not target_rf.get("reviewed_at"):
+                target_rf["reviewed_at"] = now_iso
+                target_rf["reviewed_by"] = doctor_name
+        elif status == "ACTIVE":
+            target_rf["reviewed_at"] = None
+            target_rf["reviewed_by"] = None
+            target_rf["resolved_at"] = None
+            target_rf["resolved_by"] = None
+
+        # Keep patient["red_flag"] in sync if applicable
+        if patient.get("red_flag") and isinstance(patient["red_flag"], dict):
+            if patient["red_flag"].get("id") == red_flag_id or len(patient["red_flags"]) == 1:
+                patient["red_flag"]["status"] = status
+                patient["red_flag"]["id"] = target_rf["id"]
+                patient["red_flag"]["reviewed_at"] = target_rf.get("reviewed_at")
+                patient["red_flag"]["reviewed_by"] = target_rf.get("reviewed_by")
+                patient["red_flag"]["resolved_at"] = target_rf.get("resolved_at")
+                patient["red_flag"]["resolved_by"] = target_rf.get("resolved_by")
+
+        # Update overall active red flag status via the canonical lifecycle helper
+        has_active = any(self.red_flag_has_active(rf) for rf in red_flags_list)
+        patient["red_flag_detected"] = has_active
+
+        # Audit timeline event (only if transition occurred)
+        if prev_status != status:
+            if status == "REVIEWED":
+                title = "Red flag reviewed"
+                desc = f"Clinical safety alert '{target_rf.get('title') or target_rf.get('message')}' reviewed by {doctor_name}."
+            elif status == "RESOLVED":
+                title = "Red flag resolved"
+                desc = f"Clinical safety alert '{target_rf.get('title') or target_rf.get('message')}' marked resolved by {doctor_name}."
+            else:
+                title = "Red flag reactivated"
+                desc = f"Clinical safety alert '{target_rf.get('title') or target_rf.get('message')}' set to ACTIVE by {doctor_name}."
+
+            tl_id = f"TL-RF-{red_flag_id}-{status}-{uuid.uuid4().hex[:4].upper()}"
+            timeline_ev = {
+                "id": tl_id,
+                "patient_id": patient_id,
+                "type": f"red_flag_{status.lower()}",
+                "category": "Safety Alert",
+                "source": "doctor",
+                "title": title,
+                "description": desc,
+                "timestamp": now_iso,
+                "date": now_dt.strftime("%d %b %Y"),
+                "time": now_dt.strftime("%I:%M %p"),
+                "red_flag_id": red_flag_id,
+                "previous_status": prev_status,
+                "new_status": status,
+                "doctor": doctor_name,
+                "verified_by": doctor_name
+            }
+            if "timeline" not in patient or not isinstance(patient["timeline"], list):
+                patient["timeline"] = []
+            patient["timeline"].append(timeline_ev)
+
+        # Set status on patient for test/caller convenience
+        patient["status"] = target_rf["status"]
+
+        save_patient_to_db(patient, db_path=self.db_path)
+        return patient
+
     def generate_patient_clinical_summary(
         self,
         patient: Dict[str, Any],
@@ -917,22 +1195,59 @@ class StatefulPatientService(BasePatientService):
         if extracted_history.get("relievingFactors") and extracted_history["relievingFactors"] != "Not yet provided":
             hpi["relieving_factors"] = extracted_history["relievingFactors"]
 
-        # 3. Update Red Flags
+        # 3. Update Red Flags (preserving historical lifecycle records)
         if red_flags:
             patient["red_flag_detected"] = True
             patient["red_flag_note"] = "; ".join(red_flags)
+
+            existing_rfs = patient.get("red_flags") if isinstance(patient.get("red_flags"), list) else []
+            rf_objs = []
+            now_iso = datetime.now().isoformat()
+            for idx, rf_text in enumerate(red_flags):
+                existing = next(
+                    (f for f in existing_rfs if f.get("message") == rf_text or f.get("title") == rf_text or f.get("title") == f"Symptom Red Flag: {rf_text}"),
+                    None
+                )
+                if existing:
+                    # Historical record retained with its current lifecycle status intact
+                    rf_objs.append(existing)
+                else:
+                    rf_objs.append({
+                        "id": f"RF-{patient_id}-{idx+1}",
+                        "type": "interview_safety_alert",
+                        "message": rf_text,
+                        "severity": "High",
+                        "status": "ACTIVE",
+                        "detected_at": now_iso,
+                        "reviewed_at": None,
+                        "resolved_at": None,
+                        "reviewed_by": None,
+                        "resolved_by": None,
+                        "title": f"Symptom Red Flag: {rf_text}",
+                        "rule_trigger": "Patient Interview Safety Screen",
+                        "nlp_trigger": rf_text,
+                        "physician_action": "Urgent physician evaluation indicated"
+                    })
+            patient["red_flags"] = rf_objs
+            first_rf = rf_objs[0]
             patient["red_flag"] = {
                 "detected": True,
-                "title": f"Symptom Red Flag: {red_flags[0]}",
-                "rule_trigger": "Patient Interview Safety Screen",
-                "nlp_trigger": "; ".join(red_flags),
-                "physician_action": "Urgent physician evaluation indicated"
+                "id": first_rf["id"],
+                "status": first_rf["status"],
+                "title": first_rf["title"],
+                "rule_trigger": first_rf["rule_trigger"],
+                "nlp_trigger": first_rf["nlp_trigger"],
+                "physician_action": first_rf["physician_action"]
             }
             patient["triage_priority"] = "Urgent"
         else:
             if not patient.get("red_flag_detected"):
                 patient["red_flag_detected"] = False
                 patient["red_flag_note"] = None
+                # Only clear the list when there is genuinely no history —
+                # NEVER delete historical REVIEWED/RESOLVED lifecycle records.
+                if not patient.get("red_flags"):
+                    patient["red_flags"] = []
                 patient["red_flag"] = {
                     "detected": False,
                     "title": "No emergency triage red-flags currently identified."
@@ -1011,6 +1326,18 @@ class StatefulPatientService(BasePatientService):
                 "mala": {"value": "Not provided", "source": "patient-reported"},
                 "jihwa": {"value": "Not provided", "source": "patient-reported"}
             }
+
+        # Ensure red_flags list is properly structured via the canonical lifecycle
+        # helper (legacy records normalized in-memory; historical records preserved)
+        rf_state = self.derive_red_flag_state(record)
+        record["red_flags"] = rf_state["red_flags"]
+        record["red_flag_detected"] = rf_state["has_active"]
+        if rf_state["red_flags"] and isinstance(record.get("red_flag"), dict):
+            # Keep legacy mirror aligned with the canonical lifecycle list
+            first_active = next((rf for rf in rf_state["red_flags"] if self.red_flag_has_active(rf)), None)
+            mirror = first_active or rf_state["red_flags"][0]
+            record["red_flag"]["id"] = mirror.get("id") or record["red_flag"].get("id")
+            record["red_flag"]["status"] = mirror.get("status") or record["red_flag"].get("status")
 
         # Dynamic documents linkage from document_service (strictly isolated by patient_id)
         try:
@@ -1223,6 +1550,12 @@ class StatefulPatientService(BasePatientService):
         for p in self._patients.values():
             if department and p.get("department") != department:
                 continue
+
+            # Canonical lifecycle-aware derivation — dashboard stats and queue rows
+            # must ALWAYS use this same source of truth so they cannot disagree.
+            rf_state = self.derive_red_flag_state(p)
+            has_active_rf = rf_state["has_active"]
+
             queue.append({
                 "id": p["id"],
                 "queue_token": p["queue_token"],
@@ -1234,8 +1567,9 @@ class StatefulPatientService(BasePatientService):
                 "triage_priority": p.get("triage_priority", "Routine"),
                 "chief_complaint": p.get("chief_complaint") or "General consultation",
                 "intake_status": p.get("intake_status", "Completed"),
-                "red_flag_detected": p.get("red_flag_detected", False),
+                "red_flag_detected": has_active_rf,
                 "red_flag_note": p.get("red_flag_note"),
+                "red_flags": rf_state["red_flags"],
                 "language": p.get("language", "Hindi"),
                 "arrived_at": p.get("arrived_at", "10:00 AM"),
                 "verification_status": p.get("verification_status", "Pending Review"),

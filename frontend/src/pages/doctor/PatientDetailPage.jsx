@@ -36,6 +36,8 @@ export default function PatientDetailPage() {
   const [activeTab, setActiveTab] = useState('structured'); // 'structured' | 'timeline' | 'documents' | 'ayush'
   const [verificationStatus, setVerificationStatus] = useState('Pending Review');
   const [ayushEnabled, setAyushEnabled] = useState(false);
+  const [updatingRedFlag, setUpdatingRedFlag] = useState(false);
+  const [successToast, setSuccessToast] = useState(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -72,8 +74,6 @@ export default function PatientDetailPage() {
     };
   }, [id]);
 
-  const [successToast, setSuccessToast] = useState(null);
-
   const handleStatusChange = async (newStatus, notes) => {
     setVerificationStatus(newStatus);
     try {
@@ -101,6 +101,23 @@ export default function PatientDetailPage() {
     } catch (err) {
       console.error('Failed to save doctor edits:', err);
       throw err;
+    }
+  };
+
+  const handleUpdateRedFlag = async (redFlagId, newStatus) => {
+    try {
+      setUpdatingRedFlag(redFlagId);
+      const updated = await patientService.updateRedFlagStatus(patient?.id || id, redFlagId, newStatus);
+      if (updated) {
+        setPatient(updated);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('caseflow-queue-updated'));
+        }
+      }
+    } catch (err) {
+      console.error('Failed to update red flag lifecycle status:', err);
+    } finally {
+      setUpdatingRedFlag(false);
     }
   };
 
@@ -153,6 +170,23 @@ export default function PatientDetailPage() {
     nlp_trigger: patient.red_flag_note,
     physician_action: 'Immediate physician evaluation required'
   } : { detected: false });
+
+  const redFlagsList = Array.isArray(patient?.red_flags) && patient.red_flags.length > 0
+    ? patient.red_flags
+    : ((patient?.red_flag?.detected || patient?.red_flag_detected) ? [{
+        id: patient?.red_flag?.id || `RF-${patient?.id || id}-1`,
+        title: patient?.red_flag?.title || patient?.red_flag_note || 'High Risk Clinical Symptom Flagged',
+        message: patient?.red_flag?.message || patient?.red_flag?.title || patient?.red_flag_note || 'High Risk Clinical Symptom Flagged',
+        status: (patient?.red_flag?.status || 'ACTIVE').toUpperCase(),
+        rule_trigger: patient?.red_flag?.rule_trigger || 'Safety Rule Triggered',
+        nlp_trigger: patient?.red_flag?.nlp_trigger || patient?.red_flag_note || null,
+        physician_action: patient?.red_flag?.physician_action || 'Immediate physician evaluation required',
+        detected_at: patient?.red_flag?.detected_at || patient?.arrived_at || null,
+        reviewed_at: patient?.red_flag?.reviewed_at || null,
+        resolved_at: patient?.red_flag?.resolved_at || null,
+        reviewed_by: patient?.red_flag?.reviewed_by || null,
+        resolved_by: patient?.red_flag?.resolved_by || null
+      }] : []);
 
   const aiSummary = patient.ai_clinical_summary || 'Intake completed. Clinical summary pending physician review.';
 
@@ -291,8 +325,13 @@ export default function PatientDetailPage() {
         </div>
       </div>
 
-      {/* Red-Flag Alert Component */}
-      <RedFlagBanner redFlag={redFlagData} />
+      {/* Red-Flag Alert Component with Lifecycle Management */}
+      <RedFlagBanner
+        redFlag={redFlagData}
+        redFlags={redFlagsList}
+        onUpdateStatus={handleUpdateRedFlag}
+        isUpdating={updatingRedFlag}
+      />
 
       {/* AI Clinical Brief Card */}
       <Card className="border-teal-200/80 bg-teal-50/20">
