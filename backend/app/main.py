@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1 import api_router
 
+# Reload trigger: FHIR & ABHA export endpoints enabled
 app = FastAPI(
     title="CaseFlow Clinical Intake API",
     description=(

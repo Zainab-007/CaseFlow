@@ -15,6 +15,7 @@ from app.schemas.patient import (
     RedFlagStatusUpdate
 )
 from app.services.base_patient_service import patient_service
+from app.services.fhir_service import fhir_service
 
 router = APIRouter(prefix="/patients", tags=["Patients"])
 
@@ -136,3 +137,27 @@ async def get_patient_timeline(patient_id: str):
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
     return patient.get("timeline", [])
+
+
+@router.get("/{patient_id}/fhir")
+async def get_patient_fhir_bundle(patient_id: str):
+    """
+    Serializes a canonical patient record into a standard FHIR R4 Bundle.
+    Guarantees strict patient isolation and does not modify the record.
+    """
+    patient = await patient_service.get_patient_by_id(patient_id)
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+    return fhir_service.patient_to_fhir_bundle(patient)
+
+
+@router.post("/{patient_id}/abha/push")
+async def push_patient_to_mock_abha(patient_id: str):
+    """
+    Simulates a FHIR Bundle push to the ABDM / ABHA Gateway.
+    Prototype / Demonstration simulation only — no external calls or credential transmission.
+    """
+    patient = await patient_service.get_patient_by_id(patient_id)
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+    return fhir_service.simulate_mock_abha_push(patient)

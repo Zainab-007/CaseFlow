@@ -1542,5 +1542,89 @@ export const patientService = {
       return clientFallbackPatients[targetId];
     }
     return null;
+  },
+
+  /**
+   * Retrieve a FHIR R4 Bundle representation of the patient's clinical record.
+   */
+  async getPatientFhirBundle(id) {
+    const targetId = id || this.getCurrentPatientId();
+    if (!targetId) return null;
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/${targetId}/fhir`);
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (err) {
+      console.warn('Backend FHIR export failed, using client fallback:', err.message);
+    }
+
+    // Client fallback: generate standard FHIR Bundle
+    const p = clientFallbackPatients[targetId];
+    if (!p) return null;
+
+    return {
+      resourceType: 'Bundle',
+      id: `bundle-${targetId}`,
+      type: 'collection',
+      timestamp: new Date().toISOString(),
+      entry: [
+        {
+          resource: {
+            resourceType: 'Patient',
+            id: targetId,
+            name: [{ text: p.name || 'Patient' }],
+            gender: (p.gender || 'unknown').toLowerCase(),
+            identifier: [
+              { system: 'https://caseflow.health/patient-id', value: targetId },
+              ...(p.abha_id ? [{ system: 'https://healthid.ndhm.gov.in', value: p.abha_id }] : [])
+            ]
+          }
+        },
+        ...(p.chief_complaint ? [{
+          resource: {
+            resourceType: 'Observation',
+            id: `obs-complaint-${targetId}`,
+            status: 'final',
+            code: { text: 'Chief Complaint' },
+            valueString: typeof p.chief_complaint === 'object' ? p.chief_complaint.title : p.chief_complaint
+          }
+        }] : [])
+      ]
+    };
+  },
+
+  /**
+   * Simulate a mock ABHA FHIR push for doctor OPD sign-off.
+   */
+  async pushPatientToAbha(id) {
+    const targetId = id || this.getCurrentPatientId();
+    if (!targetId) return null;
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/${targetId}/abha/push`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (err) {
+      console.warn('Backend ABHA push failed, using client fallback:', err.message);
+    }
+
+    // Client fallback simulation
+    const bundle = await this.getPatientFhirBundle(targetId);
+    return {
+      success: true,
+      patient_id: targetId,
+      mock_transaction_id: `TXN-ABHA-MOCK-${targetId}-${Math.random().toString(36).substring(2, 9).toUpperCase()}`,
+      pushed_at: new Date().toISOString(),
+      resource_type: 'Bundle',
+      bundle_id: bundle?.id || `bundle-${targetId}`,
+      fhir_bundle: bundle,
+      message: 'Mock ABHA push successful. FHIR Bundle generated and simulated successfully (Prototype/Simulation only — no external ABDM service contacted).'
+    };
   }
 };
