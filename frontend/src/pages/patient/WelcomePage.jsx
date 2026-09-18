@@ -1,15 +1,40 @@
-import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import Button from '../../components/ui/Button';
 import AudioPromptBar from '../../components/patient/AudioPromptBar';
 import { patientService } from '../../services/patientService';
-import { Play, Mic, ShieldCheck, Languages, ArrowRight, HeartPulse } from 'lucide-react';
+import { Play, Mic, ShieldCheck, Languages, ArrowRight, HeartPulse, Clock } from 'lucide-react';
 
 export default function WelcomePage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const [sessionExpiredNotice, setSessionExpiredNotice] = useState(Boolean(location.state?.sessionExpired));
 
   return (
     <div className="flex-1 flex flex-col justify-center items-center text-center max-w-2xl mx-auto w-full py-6 space-y-8">
+      {/* Session Expired Privacy Banner */}
+      {sessionExpiredNotice && (
+        <div className="w-full p-4 rounded-2xl bg-amber-50 border-2 border-amber-300 text-amber-900 flex items-center justify-between text-left shadow-xs animate-in fade-in duration-200">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-amber-200 text-amber-800 flex items-center justify-center shrink-0">
+              <Clock className="w-5 h-5" />
+            </div>
+            <div className="text-xs space-y-0.5">
+              <p className="font-bold">Session ended due to inactivity to protect patient privacy.</p>
+              <p className="text-amber-800 font-medium">गोपनीयता सुरक्षा हेतु पिछला सत्र स्वतः रीसेट कर दिया गया।</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSessionExpiredNotice(false)}
+            className="text-amber-700 hover:text-amber-900 font-bold px-2.5 py-1 text-sm cursor-pointer"
+            title="Dismiss notice"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Audio narration bar on by default */}
       <AudioPromptBar
         text="Welcome to CaseFlow. Let's prepare your information before you meet the doctor."

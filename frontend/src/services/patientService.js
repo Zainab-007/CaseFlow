@@ -492,6 +492,13 @@ export const patientService = {
     }
   },
 
+  resetKioskSession() {
+    this.clearCurrentPatient();
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('caseflow-session-cleared'));
+    }
+  },
+
   getPatientLanguage(patientId = null) {
     if (typeof window !== 'undefined') {
       const storedLang = sessionStorage.getItem('caseflow_patient_lang');

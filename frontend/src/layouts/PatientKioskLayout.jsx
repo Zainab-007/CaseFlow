@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import Progress from '../components/ui/Progress';
 import EmergencyHelpModal from '../components/patient/EmergencyHelpModal';
+import KioskInactivityModal from '../components/patient/KioskInactivityModal';
 import { RotateCcw, AlertTriangle, Languages, Building2, HelpCircle } from 'lucide-react';
 import { patientService } from '../services/patientService';
+import { kioskSessionService } from '../services/kioskSessionService';
 
 const KIOSK_STEPS = [
   { path: '/patient', label: 'Welcome' },
@@ -19,6 +21,29 @@ export default function PatientKioskLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [helpOpen, setHelpOpen] = useState(false);
+  const [inactivityState, setInactivityState] = useState(kioskSessionService.getState());
+
+  // Subscribe to centralized kiosk inactivity state updates
+  useEffect(() => {
+    const unsubscribe = kioskSessionService.subscribe(setInactivityState);
+    return () => unsubscribe();
+  }, []);
+
+  // Manage timer lifecycle based on route:
+  // Active on all intake steps; stopped on the idle Welcome landing screen
+  useEffect(() => {
+    const isWelcomeScreen = location.pathname === '/patient' || location.pathname === '/patient/';
+
+    if (!isWelcomeScreen) {
+      // Start or refresh timer on intake step navigation
+      kioskSessionService.start(() => {
+        navigate('/patient', { state: { sessionExpired: true }, replace: true });
+      });
+      kioskSessionService.recordActivity();
+    } else {
+      kioskSessionService.stop();
+    }
+  }, [location.pathname, navigate]);
 
   // Determine current step number based on route
   const currentStepIndex = KIOSK_STEPS.findIndex((s) => s.path === location.pathname);
@@ -26,7 +51,7 @@ export default function PatientKioskLayout() {
 
   const handleRestartSession = () => {
     if (window.confirm('Reset this session? All temporary kiosk information will be cleared for the next patient.')) {
-      patientService.clearCurrentPatient();
+      kioskSessionService.resetSession();
       navigate('/patient');
     }
   };
@@ -109,6 +134,14 @@ export default function PatientKioskLayout() {
 
       {/* Help Modal */}
       <EmergencyHelpModal isOpen={helpOpen} onClose={() => setHelpOpen(false)} />
+
+      {/* Inactivity Privacy Warning Modal */}
+      <KioskInactivityModal
+        isOpen={inactivityState.isWarning}
+        remainingSeconds={inactivityState.remainingSeconds}
+        onContinue={() => kioskSessionService.extendSession()}
+        onEndSession={() => kioskSessionService.expireSession()}
+      />
     </div>
   );
 }

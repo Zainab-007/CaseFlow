@@ -6,6 +6,7 @@ import LiveExtractedPanel from '../../components/patient/LiveExtractedPanel';
 import InterviewSummaryModal from '../../components/patient/InterviewSummaryModal';
 import { interviewService } from '../../services/interviewService';
 import { patientService } from '../../services/patientService';
+import { kioskSessionService } from '../../services/kioskSessionService';
 import {
   ArrowRight,
   ArrowLeft,
@@ -114,6 +115,7 @@ export default function InterviewPage() {
     });
 
     try {
+      kioskSessionService.recordActivity();
       const updatedSession = await interviewService.submitAnswer(
         session?.session_id,
         answerText,

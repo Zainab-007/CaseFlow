@@ -346,5 +346,12 @@ export const interviewService = {
       return formatClientState();
     }
     return null;
+  },
+
+  /**
+   * Resets in-memory client interview session for kiosk privacy cleanup
+   */
+  clearSession() {
+    clientFallbackSession = null;
   }
 };
