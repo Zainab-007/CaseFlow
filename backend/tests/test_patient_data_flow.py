@@ -149,9 +149,13 @@ def test_complete_patient_data_flow_and_isolation():
     assert ramesh["age"] == 62
     assert ramesh["gender"] == "Male"
     assert "cough" in ramesh["chief_complaint"].lower(), "Ramesh's original cough complaint must remain intact"
-    assert "dyspnea" in ramesh["chief_complaint"].lower() or "cough" in ramesh["chief_complaint"].lower()
-    assert ramesh["red_flag_detected"] is True, "Ramesh's original red flag must remain intact"
+    assert ramesh["red_flag_detected"] is False, "Ramesh (Patient 2) has no active red flag as per clean demo requirements"
     assert len(ramesh.get("documents", [])) >= 2, "Ramesh's original documents must remain attached"
+    # Verify seeded Patient 3 (Mohammad Irfan) holds the active red flag
+    irfan_res = client.get("/api/v1/patients/CF-2026-004")
+    assert irfan_res.status_code == 200, "CF-2026-004 must exist"
+    assert irfan_res.json()["red_flag_detected"] is True, "CF-2026-004 must have active red flag"
+
     print("CF-2026-001 seeded demo clinical history is completely intact!")
 
     # STEP 10: Register second new patient (Rahul Demo, 35, Male, Fever) & verify mutual isolation

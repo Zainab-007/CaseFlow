@@ -3,7 +3,7 @@ import PatientQueueTable from '../../components/doctor/PatientQueueTable';
 import Card, { CardContent } from '../../components/ui/Card';
 import Alert from '../../components/ui/Alert';
 import { patientService } from '../../services/patientService';
-import { Users, ShieldAlert, Clock, Search, Filter, Stethoscope, RefreshCw } from 'lucide-react';
+import { Users, ShieldAlert, Clock, Search, Filter, Stethoscope, RefreshCw, CheckCircle2 } from 'lucide-react';
 
 export default function DoctorDashboardPage() {
   const [patients, setPatients] = useState([]);
@@ -99,15 +99,15 @@ export default function DoctorDashboardPage() {
 
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
           <div>
-            <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
-              Avg History Time Saved
+            <p className="text-xs font-bold uppercase tracking-wider text-teal-700">
+              Intakes Completed
             </p>
-            <h3 className="text-3xl font-black text-teal-700 mt-1">
-              4.2 <span className="text-xs font-medium text-teal-700">min/patient</span>
+            <h3 className="text-3xl font-black text-teal-800 mt-1">
+              {queueStats.completedIntakes} <span className="text-xs font-medium text-teal-700">{queueStats.completedIntakes === 1 ? 'Intake' : 'Intakes'}</span>
             </h3>
           </div>
-          <div className="w-12 h-12 rounded-xl bg-slate-50 text-slate-700 flex items-center justify-center font-bold">
-            <Stethoscope className="w-6 h-6" />
+          <div className="w-12 h-12 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center font-bold">
+            <CheckCircle2 className="w-6 h-6" />
           </div>
         </div>
       </div>

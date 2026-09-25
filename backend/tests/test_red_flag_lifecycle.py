@@ -26,7 +26,7 @@ client = TestClient(app)
 
 def test_red_flag_starts_active():
     """Verify that seeded patients and newly detected alerts start with ACTIVE status."""
-    res = client.get("/api/v1/patients/CF-2026-001")
+    res = client.get("/api/v1/patients/CF-2026-004")
     assert res.status_code == 200
     p = res.json()
     assert p["red_flag_detected"] is True
@@ -40,8 +40,8 @@ def test_red_flag_starts_active():
 
 def test_active_to_reviewed_transition():
     """Verify transition from ACTIVE -> REVIEWED updates timestamps, attribution, and returns updated record."""
-    pid = "CF-2026-001"
-    rf_id = "RF-CF-2026-001-1"
+    pid = "CF-2026-004"
+    rf_id = "RF-CF-2026-004-1"
 
     # Set to REVIEWED
     res = client.patch(
@@ -65,8 +65,8 @@ def test_active_to_reviewed_transition():
 
 def test_reviewed_to_resolved_transition():
     """Verify transition from REVIEWED -> RESOLVED updates status and adds timeline event."""
-    pid = "CF-2026-001"
-    rf_id = "RF-CF-2026-001-1"
+    pid = "CF-2026-004"
+    rf_id = "RF-CF-2026-004-1"
 
     # Set to RESOLVED
     res = client.patch(
@@ -93,8 +93,8 @@ def test_reviewed_to_resolved_transition():
 
 def test_invalid_status_rejected():
     """Verify that invalid statuses (e.g. CLOSED, DISMISSED, INVALID) are rejected with 400."""
-    pid = "CF-2026-001"
-    rf_id = "RF-CF-2026-001-1"
+    pid = "CF-2026-004"
+    rf_id = "RF-CF-2026-004-1"
 
     res = client.patch(
         f"/api/v1/patients/{pid}/red-flags/{rf_id}",
@@ -106,7 +106,7 @@ def test_invalid_status_rejected():
 
 def test_unknown_red_flag_rejected():
     """Verify 404 when red flag ID does not exist on the given patient."""
-    pid = "CF-2026-001"
+    pid = "CF-2026-004"
     res = client.patch(
         f"/api/v1/patients/{pid}/red-flags/RF-NONEXISTENT-999",
         json={"status": "REVIEWED"}
@@ -172,8 +172,7 @@ def test_patient_isolation_red_flags():
 
 def test_dashboard_active_red_flag_count():
     """Verify that queue statistics count ONLY currently ACTIVE red flags."""
-    # Reset CF-2026-001 and CF-2026-004 to known ACTIVE states
-    client.patch("/api/v1/patients/CF-2026-001/red-flags/RF-CF-2026-001-1", json={"status": "ACTIVE"})
+    # Reset CF-2026-004 to known ACTIVE state
     client.patch("/api/v1/patients/CF-2026-004/red-flags/RF-CF-2026-004-1", json={"status": "ACTIVE"})
 
     # Check initial queue active count
@@ -181,10 +180,10 @@ def test_dashboard_active_red_flag_count():
     assert q_res.status_code == 200
     queue = q_res.json()
     initial_active_count = sum(1 for p in queue if p.get("red_flag_detected"))
-    assert initial_active_count >= 2
+    assert initial_active_count >= 1
 
-    # Mark CF-2026-001 as REVIEWED (no longer active)
-    client.patch("/api/v1/patients/CF-2026-001/red-flags/RF-CF-2026-001-1", json={"status": "REVIEWED"})
+    # Mark CF-2026-004 as REVIEWED (no longer active)
+    client.patch("/api/v1/patients/CF-2026-004/red-flags/RF-CF-2026-004-1", json={"status": "REVIEWED"})
 
     # Queue should now decrease active red flag count by 1
     q_res2 = client.get("/api/v1/patients/queue")
@@ -192,17 +191,14 @@ def test_dashboard_active_red_flag_count():
     active_rf_count2 = sum(1 for p in queue2 if p.get("red_flag_detected"))
     assert active_rf_count2 == initial_active_count - 1
 
-    # Mark CF-2026-004 as RESOLVED (no longer active)
+    # Mark CF-2026-004 as RESOLVED (still not active)
     client.patch("/api/v1/patients/CF-2026-004/red-flags/RF-CF-2026-004-1", json={"status": "RESOLVED"})
-
-    # Queue should now decrease active red flag count by 2
     q_res3 = client.get("/api/v1/patients/queue")
     queue3 = q_res3.json()
     active_rf_count3 = sum(1 for p in queue3 if p.get("red_flag_detected"))
-    assert active_rf_count3 == initial_active_count - 2
+    assert active_rf_count3 == initial_active_count - 1
 
     # Reset back to ACTIVE for subsequent test consistency
-    client.patch("/api/v1/patients/CF-2026-001/red-flags/RF-CF-2026-001-1", json={"status": "ACTIVE"})
     client.patch("/api/v1/patients/CF-2026-004/red-flags/RF-CF-2026-004-1", json={"status": "ACTIVE"})
     q_res4 = client.get("/api/v1/patients/queue")
     active_rf_count4 = sum(1 for p in q_res4.json() if p.get("red_flag_detected"))

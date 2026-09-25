@@ -17,8 +17,8 @@ export const MOCK_PATIENTS_QUEUE = [
     triage_priority: "Priority", // Urgent | Priority | Routine
     chief_complaint: "Persistent productive cough, progressive dyspnea on exertion for 10 days",
     intake_status: "Completed",
-    red_flag_detected: true,
-    red_flag_note: "Orthopnea & exertional dyspnea in known hypertensive patient",
+    red_flag_detected: false,
+    red_flag_note: null,
     language: "Hindi / English",
     arrived_at: "10:15 AM",
     verification_status: "Pending Review", // Pending Review | Verified | Edited | Rejected
@@ -41,7 +41,7 @@ export const MOCK_PATIENTS_QUEUE = [
     verification_status: "Pending Review",
   },
   {
-    id: "CF-2026-003",
+    id: "CF-2026-004",
     queue_token: "OPD-106",
     name: "Mohammad Irfan",
     age: 55,
@@ -56,23 +56,6 @@ export const MOCK_PATIENTS_QUEUE = [
     language: "Hindi",
     arrived_at: "10:48 AM",
     verification_status: "Pending Review",
-  },
-  {
-    id: "CF-2026-004",
-    queue_token: "OPD-107",
-    name: "Ananya Mukherjee",
-    age: 29,
-    gender: "Female",
-    abha_id: "91-6623-1192-5034",
-    department: "General Medicine",
-    triage_priority: "Routine",
-    chief_complaint: "Low-grade evening fever, generalized malaise, sore throat for 4 days",
-    intake_status: "Completed",
-    red_flag_detected: false,
-    red_flag_note: null,
-    language: "English",
-    arrived_at: "10:55 AM",
-    verification_status: "Verified",
   }
 ];
 
@@ -108,11 +91,11 @@ export const MOCK_PATIENT_DETAILS = {
       "Telmisartan and Metformin. Current presentation warrants evaluation for heart failure vs lower respiratory infection."
     ),
     red_flag: {
-      detected: true,
-      title: "Exertional Breathlessness in Hypertensive Patient (NYHA II/III)",
-      rule_trigger: "Rule #C12: Dyspnea on exertion + Known Cardiac/HTN History",
-      nlp_trigger: "NLP pattern: Patient mentions difficulty sleeping flat without 2 pillows (orthopnea equivalent)",
-      physician_action: "Immediate clinical chest auscultation and 12-lead ECG advised before OPD sign-off"
+      detected: false,
+      title: "No Acute Red Flags Detected",
+      rule_trigger: "Safety Screen Negative",
+      nlp_trigger: "No emergency red flags identified",
+      physician_action: "Standard outpatient clinical evaluation and chest auscultation"
     },
     structured_history: {
       hpi: {

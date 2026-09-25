@@ -263,11 +263,12 @@ async def test_demo_patients_intact_and_not_duplicated_on_restart(temp_db_path):
     """Existing demo patients remain intact and re-initializing DB does not duplicate seeded records."""
     service1 = StatefulPatientService(db_path=temp_db_path)
     
-    # Initially 4 seeded demo patients
+    # Initially 3 seeded demo patients
     queue1 = await service1.get_opd_queue()
-    assert len(queue1) == 4
+    assert len(queue1) == 3
     demo_ids = [p["id"] for p in queue1]
     assert "CF-2026-001" in demo_ids
+    assert "CF-2026-002" in demo_ids
     assert "CF-2026-004" in demo_ids
     
     # Register 1 new patient
@@ -278,8 +279,8 @@ async def test_demo_patients_intact_and_not_duplicated_on_restart(temp_db_path):
     for _ in range(5):
         s = StatefulPatientService(db_path=temp_db_path)
         q = await s.get_opd_queue()
-        # Should still be exactly 5 patients total, not duplicated!
-        assert len(q) == 5
+        # Should still be exactly 4 patients total, not duplicated!
+        assert len(q) == 4
         ids = [p["id"] for p in q]
         assert ids.count("CF-2026-001") == 1
         assert ids.count("CF-2026-005") == 1

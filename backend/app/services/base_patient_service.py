@@ -197,8 +197,8 @@ class StatefulPatientService(BasePatientService):
         self._seed_distinct_patients()
 
     def _seed_distinct_patients(self):
-        """Seed 4 distinct clinical patients demonstrating diverse conditions, demographics, and red flags."""
-        # Patient 1: Ramesh Chandra Sharma (Respiratory / Cardiac concern)
+        """Seed 3 distinct clinical patients demonstrating diverse conditions, demographics, and red flags."""
+        # Patient 1: Ramesh Chandra Sharma (Respiratory / Cardiac concern - Priority, No Active Red Flag)
         p1 = {
             "id": "CF-2026-001",
             "queue_token": "OPD-104",
@@ -211,8 +211,8 @@ class StatefulPatientService(BasePatientService):
             "triage_priority": "Priority",
             "chief_complaint": "Persistent productive cough, progressive dyspnea on exertion for 10 days",
             "intake_status": "Completed",
-            "red_flag_detected": True,
-            "red_flag_note": "Orthopnea and exertional breathlessness in known hypertensive patient",
+            "red_flag_detected": False,
+            "red_flag_note": None,
             "language": "Hindi / English",
             "arrived_at": "10:15 AM",
             "verification_status": "Pending Review",
@@ -240,32 +240,13 @@ class StatefulPatientService(BasePatientService):
                 "Telmisartan and Metformin. Current presentation warrants evaluation for heart failure vs lower respiratory infection."
             ),
             "red_flag": {
-                "detected": True,
-                "id": "RF-CF-2026-001-1",
-                "status": "ACTIVE",
-                "title": "Exertional Breathlessness in Hypertensive Patient (NYHA II/III)",
-                "rule_trigger": "Rule #C12: Dyspnea on exertion + Known Cardiac/HTN History",
-                "nlp_trigger": "NLP pattern: Patient mentions difficulty sleeping flat without 2 pillows (orthopnea equivalent)",
-                "physician_action": "Immediate clinical chest auscultation and 12-lead ECG advised before OPD sign-off"
+                "detected": False,
+                "title": "No Acute Red Flags Detected",
+                "rule_trigger": "Safety Screen Negative",
+                "nlp_trigger": "No emergency red flags identified",
+                "physician_action": "Standard outpatient clinical evaluation and chest auscultation"
             },
-            "red_flags": [
-                {
-                    "id": "RF-CF-2026-001-1",
-                    "type": "cardiac_respiratory_alert",
-                    "message": "Exertional Breathlessness in Hypertensive Patient (NYHA II/III)",
-                    "severity": "High",
-                    "status": "ACTIVE",
-                    "detected_at": "2026-09-14T10:15:00",
-                    "reviewed_at": None,
-                    "resolved_at": None,
-                    "reviewed_by": None,
-                    "resolved_by": None,
-                    "title": "Exertional Breathlessness in Hypertensive Patient (NYHA II/III)",
-                    "rule_trigger": "Rule #C12: Dyspnea on exertion + Known Cardiac/HTN History",
-                    "nlp_trigger": "NLP pattern: Patient mentions difficulty sleeping flat without 2 pillows (orthopnea equivalent)",
-                    "physician_action": "Immediate clinical chest auscultation and 12-lead ECG advised before OPD sign-off"
-                }
-            ],
+            "red_flags": [],
             "structured_history": {
                 "hpi": {
                     "onset": "Gradual onset over 10 days",
@@ -392,95 +373,10 @@ class StatefulPatientService(BasePatientService):
             ]
         }
 
-        # Patient 3: Ananya Mukherjee (Infectious / ENT)
-        p3 = {
-            "id": "CF-2026-003",
-            "queue_token": "OPD-106",
-            "name": "Ananya Mukherjee",
-            "age": 29,
-            "gender": "Female",
-            "abha_id": "91-6623-1192-5034",
-            "phone": "+91 98201 55667",
-            "department": "General Medicine",
-            "triage_priority": "Routine",
-            "chief_complaint": "Low-grade evening fever, generalized malaise, sore throat for 4 days",
-            "intake_status": "Completed",
-            "red_flag_detected": False,
-            "red_flag_note": None,
-            "language": "English",
-            "arrived_at": "10:35 AM",
-            "verification_status": "Verified",
-            "doctor_notes": "Reviewed and verified outpatient ENT intake.",
-            "demographics": {
-                "name": "Ananya Mukherjee",
-                "age": 29,
-                "gender": "Female",
-                "abha_id": "91-6623-1192-5034",
-                "contact": "+91 98201 55667",
-                "blood_group": "O+",
-                "arrived_at": "10:35 AM",
-                "consultation_type": "Acute Outpatient Care",
-                "ayush_mode": "Allopathic Standard (AYUSH Inactive)"
-            },
-            "triage": {
-                "priority": "Routine",
-                "vitals_summary": "BP 116/74 mmHg, Pulse 82 bpm, SpO2 98% on room air, Temp 100.2°F",
-                "triage_nurse": "Staff Nurse Priya (Station 2)"
-            },
-            "ai_clinical_summary": (
-                "29-year-old female presenting with a 4-day history of low-grade fever (max 100.4°F in evenings), painful deglutition, "
-                "and generalized myalgia. Reports rhinorrhea and mild dry cough. No rash, joint swelling, or shortness of breath. "
-                "Clinical picture is suggestive of acute viral pharyngitis / upper respiratory tract infection."
-            ),
-            "red_flag": {
-                "detected": False,
-                "title": "No Red Flags Detected",
-                "rule_trigger": "Rule #ID02: Sepsis / Severe Systemic Infection Screen Negative",
-                "nlp_trigger": "No altered sensorium, stiff neck, or petechial rash",
-                "physician_action": "Oropharyngeal examination and symptomatic relief"
-            },
-            "red_flags": [],
-            "structured_history": {
-                "hpi": {
-                    "onset": "Acute onset 4 days ago",
-                    "character": "Scratchy throat with painful swallowing, generalized body aches",
-                    "aggravating_factors": "Swallowing dry food",
-                    "relieving_factors": "Warm salt water gargles, Paracetamol",
-                    "severity": "Mild (3/10)",
-                    "sputum": "None"
-                },
-                "past_medical_history": [],
-                "current_medications": [
-                    {"name": "Tab. Paracetamol", "dose": "650 mg", "frequency": "SOS for fever", "adherence": "Intermittent", "source": "patient-reported"},
-                    {"name": "Tab. Cetirizine", "dose": "10 mg", "frequency": "Once daily at night", "adherence": "Regular (2 days)", "source": "patient-reported"}
-                ],
-                "allergies": [
-                    {"allergen": "Penicillin", "reaction": "Skin hives and urticaria", "severity": "Moderate"}
-                ],
-                "family_history": ["No chronic illnesses reported"],
-                "personal_social": {"smoking": "Non-smoker", "alcohol": "Occasional social", "diet": "Non-vegetarian"},
-                "review_of_systems": {
-                    "ent": "Sore throat and clear rhinorrhea; no ear pain",
-                    "respiratory": "Mild dry cough; no wheezing",
-                    "gastrointestinal": "Normal"
-                }
-            },
-            "timeline": [
-                {
-                    "date": "14 Sep 2026",
-                    "time": "10:35 AM",
-                    "title": "CaseFlow Pre-Consultation Kiosk Intake",
-                    "category": "Intake",
-                    "description": "Patient completed English kiosk intake. Reported 4-day sore throat and low-grade fever.",
-                    "source": "patient-reported"
-                }
-            ]
-        }
-
-        # Patient 4: Mohammad Irfan (Urgent Triage / Cardiac Red Flag)
+        # Patient 3: Mohammad Irfan (Urgent Triage / Cardiac Red Flag)
         p4 = {
             "id": "CF-2026-004",
-            "queue_token": "OPD-107",
+            "queue_token": "OPD-106",
             "name": "Mohammad Irfan",
             "age": 55,
             "gender": "Male",
@@ -582,7 +478,8 @@ class StatefulPatientService(BasePatientService):
             ]
         }
 
-        for p in [p1, p2, p3, p4]:
+        # Retain exactly 3 demo patients: CF-2026-001 (Priority), CF-2026-002 (Routine), CF-2026-004 (Urgent)
+        for p in [p1, p2, p4]:
             if p["id"] not in self._patients:
                 p["consent"] = {
                     "given": True,
@@ -595,9 +492,6 @@ class StatefulPatientService(BasePatientService):
             else:
                 existing_p = self._patients[p["id"]]
                 if ("red_flags" not in existing_p or not isinstance(existing_p.get("red_flags"), list) or existing_p.get("red_flags") is None) and p.get("red_flags"):
-                    # Legacy backfill: materialize historical red_flags from legacy fields.
-                    # Preserve the record's existing lifecycle status (never resurrect a
-                    # previously REVIEWED/RESOLVED flag back to ACTIVE just because of a restart).
                     legacy_status = str(
                         (existing_p.get("red_flag") or {}).get("status") or "ACTIVE"
                     ).upper()
@@ -610,9 +504,23 @@ class StatefulPatientService(BasePatientService):
                     if "red_flag" in p and isinstance(p["red_flag"], dict):
                         existing_p.setdefault("red_flag", {}).update(p["red_flag"])
                         existing_p["red_flag"]["status"] = legacy_status
-                    # Persist derived overall active state from the canonical helper
                     existing_p["red_flag_detected"] = self.derive_red_flag_state(existing_p)["has_active"]
                     save_patient_to_db(existing_p, db_path=self.db_path)
+
+        # Remove legacy seeded demo patient CF-2026-003 if present in DB/memory
+        if "CF-2026-003" in self._patients:
+            del self._patients["CF-2026-003"]
+            from app.db.sqlite_db import delete_patient_from_db
+            delete_patient_from_db("CF-2026-003", db_path=self.db_path)
+
+        # Ensure CF-2026-001 has no active red flag in DB/memory
+        if "CF-2026-001" in self._patients:
+            self._patients["CF-2026-001"]["red_flag_detected"] = False
+            self._patients["CF-2026-001"]["red_flag_note"] = None
+            self._patients["CF-2026-001"]["red_flags"] = []
+            self._patients["CF-2026-001"]["red_flag"] = p1["red_flag"]
+            save_patient_to_db(self._patients["CF-2026-001"], db_path=self.db_path)
+
 
     async def create_patient(self, patient_data: Dict[str, Any]) -> Dict[str, Any]:
         """Creates a new patient record with a unique ID and full clinical profile."""

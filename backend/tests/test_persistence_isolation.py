@@ -162,21 +162,17 @@ def test_persistence_and_isolation():
     # Also verify seed patients are all distinct
     p1 = client.get("/api/v1/patients/CF-2026-001").json()
     p2 = client.get("/api/v1/patients/CF-2026-002").json()
-    p3 = client.get("/api/v1/patients/CF-2026-003").json()
     p4 = client.get("/api/v1/patients/CF-2026-004").json()
 
     assert p1["demographics"]["name"] == "Ramesh Chandra Sharma"
     assert p2["demographics"]["name"] == "Sunita Devi Verma"
-    assert p3["demographics"]["name"] == "Ananya Mukherjee"
     assert p4["demographics"]["name"] == "Mohammad Irfan"
 
     assert p1["chief_complaint"] != p2["chief_complaint"]
-    assert p2["chief_complaint"] != p3["chief_complaint"]
-    assert p3["chief_complaint"] != p4["chief_complaint"]
+    assert p2["chief_complaint"] != p4["chief_complaint"]
 
     assert p1["triage"]["priority"] == "Priority"
     assert p2["triage"]["priority"] == "Routine"
-    assert p3["triage"]["priority"] == "Routine"
     assert p4["triage"]["priority"] == "Urgent"
 
     print("Verified: Doctor review records for all seed patients are completely distinct.")

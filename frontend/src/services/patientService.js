@@ -26,8 +26,8 @@ let clientFallbackPatients = {
     triage_priority: 'Priority',
     chief_complaint: 'Persistent productive cough, progressive dyspnea on exertion for 10 days',
     intake_status: 'Completed',
-    red_flag_detected: true,
-    red_flag_note: 'Orthopnea and exertional breathlessness in known hypertensive patient',
+    red_flag_detected: false,
+    red_flag_note: null,
     language: 'Hindi / English',
     arrived_at: '10:15 AM',
     verification_status: 'Pending Review',
@@ -51,32 +51,13 @@ let clientFallbackPatients = {
       '62-year-old male with long-standing Type 2 Diabetes and Hypertension presenting with a 10-day history of ' +
       'productive cough accompanied by progressive exertional dyspnea (NYHA Class II). Denies fever, chest pain, or hemoptysis.',
     red_flag: {
-      detected: true,
-      id: 'RF-CF-2026-001-1',
-      status: 'ACTIVE',
-      title: 'Exertional Breathlessness in Hypertensive Patient (NYHA II/III)',
-      rule_trigger: 'Rule #C12: Dyspnea on exertion + Known Cardiac/HTN History',
-      nlp_trigger: 'NLP pattern: Patient mentions difficulty sleeping flat without 2 pillows',
-      physician_action: 'Immediate clinical chest auscultation and 12-lead ECG advised before OPD sign-off'
+      detected: false,
+      title: 'No Acute Red Flags Detected',
+      rule_trigger: 'Safety Screen Negative',
+      nlp_trigger: 'No emergency red flags identified',
+      physician_action: 'Standard outpatient clinical evaluation and chest auscultation'
     },
-    red_flags: [
-      {
-        id: 'RF-CF-2026-001-1',
-        type: 'cardiac_respiratory_alert',
-        message: 'Exertional Breathlessness in Hypertensive Patient (NYHA II/III)',
-        severity: 'High',
-        status: 'ACTIVE',
-        detected_at: '2026-09-14T10:15:00',
-        reviewed_at: null,
-        resolved_at: null,
-        reviewed_by: null,
-        resolved_by: null,
-        title: 'Exertional Breathlessness in Hypertensive Patient (NYHA II/III)',
-        rule_trigger: 'Rule #C12: Dyspnea on exertion + Known Cardiac/HTN History',
-        nlp_trigger: 'NLP pattern: Patient mentions difficulty sleeping flat without 2 pillows',
-        physician_action: 'Immediate clinical chest auscultation and 12-lead ECG advised before OPD sign-off'
-      }
-    ],
+    red_flags: [],
     structured_history: {
       hpi: {
         onset: 'Gradual onset over 10 days',
@@ -189,83 +170,9 @@ let clientFallbackPatients = {
     ]
   },
 
-  'CF-2026-003': {
-    id: 'CF-2026-003',
-    queue_token: 'OPD-106',
-    name: 'Ananya Mukherjee',
-    age: 29,
-    gender: 'Female',
-    abha_id: '91-6623-1192-5034',
-    phone: '+91 98201 55667',
-    department: 'General Medicine',
-    triage_priority: 'Routine',
-    chief_complaint: 'Low-grade evening fever, generalized malaise, sore throat for 4 days',
-    intake_status: 'Completed',
-    red_flag_detected: false,
-    red_flag_note: null,
-    language: 'English',
-    arrived_at: '10:35 AM',
-    verification_status: 'Verified',
-    demographics: {
-      name: 'Ananya Mukherjee',
-      age: 29,
-      gender: 'Female',
-      abha_id: '91-6623-1192-5034',
-      contact: '+91 98201 55667',
-      blood_group: 'O+',
-      arrived_at: '10:35 AM',
-      consultation_type: 'Acute Outpatient Care',
-      ayush_mode: 'Allopathic Standard (AYUSH Inactive)'
-    },
-    triage: {
-      priority: 'Routine',
-      vitals_summary: 'BP 116/74 mmHg, Pulse 82 bpm, SpO2 98% on room air, Temp 100.2°F',
-      triage_nurse: 'Staff Nurse Priya (Station 2)'
-    },
-    ai_clinical_summary:
-      '29-year-old female presenting with a 4-day history of low-grade fever, painful swallowing, and generalized myalgia. ' +
-      'Reports rhinorrhea and mild dry cough. Clinical picture is suggestive of acute viral pharyngitis.',
-    red_flag: {
-      detected: false,
-      title: 'No Red Flags Detected',
-      rule_trigger: 'Rule #ID02: Sepsis / Severe Systemic Infection Screen Negative',
-      nlp_trigger: 'No altered sensorium, stiff neck, or rash',
-      physician_action: 'Oropharyngeal examination and symptomatic relief'
-    },
-    structured_history: {
-      hpi: {
-        onset: 'Acute onset 4 days ago',
-        character: 'Scratchy throat with painful swallowing, generalized body aches',
-        aggravating_factors: 'Swallowing dry food',
-        relieving_factors: 'Warm salt water gargles, Paracetamol',
-        severity: 'Mild (3/10)',
-        sputum: 'None'
-      },
-      past_medical_history: [],
-      current_medications: [
-        { name: 'Tab. Paracetamol', dose: '650 mg', frequency: 'SOS for fever', adherence: 'Intermittent', source: 'patient-reported' },
-        { name: 'Tab. Cetirizine', dose: '10 mg', frequency: 'Once daily at night', adherence: 'Regular', source: 'patient-reported' }
-      ],
-      allergies: [{ allergen: 'Penicillin', reaction: 'Skin hives & urticaria', severity: 'Moderate' }],
-      family_history: ['No chronic illnesses reported'],
-      personal_social: { smoking: 'Non-smoker', alcohol: 'Occasional', diet: 'Non-vegetarian' },
-      review_of_systems: { ent: 'Sore throat and rhinorrhea' }
-    },
-    timeline: [
-      {
-        date: '14 Sep 2026',
-        time: '10:35 AM',
-        title: 'CaseFlow Pre-Consultation Kiosk Intake',
-        category: 'Intake',
-        description: 'Patient completed English kiosk intake. Reported 4-day sore throat and low-grade fever.',
-        source: 'patient-reported'
-      }
-    ]
-  },
-
   'CF-2026-004': {
     id: 'CF-2026-004',
-    queue_token: 'OPD-107',
+    queue_token: 'OPD-106',
     name: 'Mohammad Irfan',
     age: 55,
     gender: 'Male',
@@ -359,7 +266,7 @@ let clientFallbackPatients = {
   }
 };
 
-// Seeded demo patients (CF-2026-001 through CF-2026-004) represent existing verified OPD patients with consent
+// Seeded demo patients (CF-2026-001, CF-2026-002, CF-2026-004) represent existing OPD demo patients with consent
 Object.values(clientFallbackPatients).forEach(p => {
   p.consent = {
     given: true,
@@ -369,7 +276,7 @@ Object.values(clientFallbackPatients).forEach(p => {
   };
 });
 
-const DEMO_PATIENT_IDS = ['CF-2026-001', 'CF-2026-002', 'CF-2026-003', 'CF-2026-004'];
+const DEMO_PATIENT_IDS = ['CF-2026-001', 'CF-2026-002', 'CF-2026-004'];
 
 // ============================================================================
 // Canonical Red-Flag Lifecycle helpers (SIH26047)
@@ -639,7 +546,8 @@ export const patientService = {
       redFlags: list.filter((p) => deriveRedFlagState(p).hasActive).length,
       urgent: list.filter((p) => (p.triage_priority || '').toUpperCase() === 'URGENT').length,
       verified: list.filter((p) => (p.verification_status || '').toLowerCase() === 'verified').length,
-      pending: list.filter((p) => (p.verification_status || '').toLowerCase() !== 'verified').length
+      pending: list.filter((p) => (p.verification_status || '').toLowerCase() !== 'verified').length,
+      completedIntakes: list.filter((p) => (p.intake_status || '').toLowerCase() === 'completed').length
     };
   },
 
